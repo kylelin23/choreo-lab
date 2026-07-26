@@ -11,4 +11,8 @@ Choreo Video Library takes an uploaded dance video and makes it easier to break 
 ## Tech Stack
 - Frontend: React/Vite
 - Backend: Flask/Python
-- Database/Storage: Supabase
+- Database: Amazon DynamoDB
+- Object Storage: Amazon S3
+- State Caching: Redis
+- Containerization: Docker
+- Deployment: AWS EC2
