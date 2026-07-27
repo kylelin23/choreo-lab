@@ -1,0 +1,9 @@
+venv/
+__pycache__/
+*.pyc
+.env
+flask_session/
+AWSCLIV2.pkg
+.git/
+docs/
+README.md

@@ -1,42 +1,52 @@
-from flask import Blueprint, request, jsonify, session
+from flask import Blueprint, request, jsonify
+import jwt as pyjwt
 from apis.register import register
 from apis.login import login
 from apis.me import me
 from apis.logout import logout
+from jwt_utils import decode_token
 
 auth_bp = Blueprint('auth', __name__)
+
+
+def get_payload_or_error():
+    auth_header = request.headers.get("Authorization", "")
+    if not auth_header.startswith("Bearer "):
+        return None, "not logged in"
+    token = auth_header.split(" ", 1)[1]
+    try:
+        payload = decode_token(token)
+    except pyjwt.ExpiredSignatureError:
+        return None, "session expired"
+    except pyjwt.InvalidTokenError:
+        return None, "invalid token"
+    return payload, None
 
 
 @auth_bp.route('/api/auth/register', methods=['POST'])
 def register_route():
     data = request.json
-    supa_session, user, error = register(data["email"], data["password"])
+    token, user, error = register(data["email"], data["password"])
     if error:
         return jsonify({"error": error}), 400
-
-    if supa_session:
-        session['supabase_token'] = supa_session.access_token
-        session['user_id'] = user.id
-        return jsonify({"email": user.email})
-
-    return jsonify({"status": "check your email to confirm"})
+    return jsonify({"token": token, "email": user["email"]})
 
 
 @auth_bp.route('/api/auth/login', methods=['POST'])
 def login_route():
     data = request.json
-    supa_session, user, error = login(data["email"], data["password"])
+    token, user, error = login(data["email"], data["password"])
     if error:
         return jsonify({"error": error}), 401
-
-    session['supabase_token'] = supa_session.access_token
-    session['user_id'] = user.id
-    return jsonify({"email": user.email})
+    return jsonify({"token": token, "email": user["email"]})
 
 
 @auth_bp.route('/api/auth/me', methods=['GET'])
 def me_route():
-    result, error = me(session)
+    payload, error = get_payload_or_error()
+    if error:
+        return jsonify({"error": error}), 401
+    result, error = me(payload)
     if error:
         return jsonify({"error": error}), 401
     return jsonify(result)
@@ -44,5 +54,8 @@ def me_route():
 
 @auth_bp.route('/api/auth/logout', methods=['POST'])
 def logout_route():
-    logout(session)
+    payload, error = get_payload_or_error()
+    if error:
+        return jsonify({"error": error}), 401
+    logout(payload)
     return jsonify({"status": "logged out"})
