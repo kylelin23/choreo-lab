@@ -1,5 +1,5 @@
 import bcrypt
-from dynamo_client import users_table
+from clients import users_table
 from jwt_utils import issue_token
 
 

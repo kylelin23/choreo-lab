@@ -1,6 +1,5 @@
 import time
-from redis_client import redis_client
-
+from clients import redis_client
 
 def logout(payload):
     ttl = payload["exp"] - int(time.time())
