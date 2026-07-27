@@ -1,5 +1,4 @@
-from redis_client import redis_client
-
+from clients import redis_client
 
 def me(payload):
     if redis_client.exists(f"blocklist:{payload['jti']}"):

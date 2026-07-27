@@ -1,7 +1,7 @@
 import uuid
 import bcrypt
 from botocore.exceptions import ClientError
-from dynamo_client import users_table
+from clients import users_table
 from jwt_utils import issue_token
 
 
