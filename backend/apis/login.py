@@ -1,14 +1,13 @@
-from supabase_client import supabase
-from supabase_auth.errors import AuthApiError
+import bcrypt
+from dynamo_client import users_table
+from jwt_utils import issue_token
 
-# Authenticates the user when they log in
+
 def login(email, password):
-    try:
-        result = supabase.auth.sign_in_with_password(
-            {"email": email, "password": password})
-    except AuthApiError:
+    result = users_table.get_item(Key={"email": email})
+    item = result.get("Item")
+    if item is None or not bcrypt.checkpw(password.encode(), item["password_hash"].encode()):
         return None, None, "invalid credentials"
 
-    if result.session is None:
-        return None, None, "invalid credentials"
-    return result.session, result.user, None
+    token, _ = issue_token(item["user_id"], email)
+    return token, {"user_id": item["user_id"], "email": email}, None
