@@ -25,9 +25,9 @@ src/
 
 ### Authentication
 Authentication is handled by Flask, backed by a Users table in DynamoDB. It uses three APIs: 
-- **Register**: Creates a new entry in the DynamoDB `Users` table
+- **Register**: Creates a new entry in the DynamoDB `Users` table hashed by bcrypt
 - **Login**: Verifies credentials against the `Users` table and issues a JWT token
-- **Logout**: Invalidates the JWT token
+- **Logout**: Token ID stored in Redis to track which users are logged out
 
 API endpoints are protected and check for a valid JWT token. 
 
