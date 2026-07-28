@@ -30,3 +30,4 @@ __pycache__
 flask_session
 AWSCLIV2.pkg
 docker-compose.override.yml
+.claude

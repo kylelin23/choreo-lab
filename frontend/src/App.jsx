@@ -19,7 +19,7 @@ function App() {
   }, []);
 
   if (!checkedSession) {
-    return null; 
+    return null;
   }
 
   const handleLogout = () => {
@@ -65,7 +65,10 @@ function App() {
           )
         }
       />
-      <Route path="/home" element={<Home />} />
+      <Route
+        path="/home"
+        element={email ? <Home /> : <Navigate to="/" replace />}
+      />
     </Routes>
   );
 }
