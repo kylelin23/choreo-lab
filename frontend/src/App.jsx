@@ -2,7 +2,6 @@ import { useState, useEffect } from "react";
 import { Routes, Route, Navigate, useNavigate } from "react-router-dom";
 import Auth from "./pages/Auth.jsx";
 import UploadDance from "./pages/UploadDance.jsx";
-import Home from "./pages/Home.jsx";
 import { me as apiMe } from "./lib/api";
 import "./index.css";
 
@@ -64,10 +63,6 @@ function App() {
             <Navigate to="/" replace />
           )
         }
-      />
-      <Route
-        path="/home"
-        element={email ? <Home /> : <Navigate to="/" replace />}
       />
     </Routes>
   );
