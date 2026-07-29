@@ -5,3 +5,7 @@ redis
 pyjwt
 bcrypt
 python-dotenv
+librosa
+numpy
+opencv-python
+anthropic
