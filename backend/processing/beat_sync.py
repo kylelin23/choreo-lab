@@ -57,7 +57,7 @@ BASS_PRESENCE_MIN = 0.03
 # Count cycle. 4 -> "1 2 3 4 1 2 3 4" (beat within the 4/4 bar, the spec's
 # example). Set 8 for full dancer 8-counts ("1..8") — that's where the LLM's
 # count-1-vs-5 judgement pays off most.
-COUNTS_PER_CYCLE = 4
+COUNTS_PER_CYCLE = 8
 
 # --- Brain (LLM) knobs ------------------------------------------------------ #
 # Claude is on by default; set BEAT_SYNC_USE_LLM=0 to force the offline heuristic
