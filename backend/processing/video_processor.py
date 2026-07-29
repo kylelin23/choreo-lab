@@ -1,5 +1,7 @@
 import os
 import tempfile
+from decimal import Decimal
+
 
 from clients import s3_client, videos_table, redis_client, S3_BUCKET_NAME
 from processing.beat_sync import detect_beats_and_sync
@@ -9,16 +11,15 @@ from processing.beat_sync import detect_beats_and_sync
 # 2. Calls beat detection file
 # 3. Uploads result back to S3 and updates state in DynamoDB and Redis
 
-def process_video(video_id, user_id, raw_key):
-    """
-    Entry point for background video processing. Called in a thread from
-    apis/upload_video.py — not an HTTP-facing function.
+def to_decimal(value):
+    if isinstance(value, float):
+        return Decimal(str(value))
+    if isinstance(value, list):
+        return [to_decimal(v) for v in value]
+    return value
 
-    Handles: downloading the raw video from S3, calling the beat detection
-    pipeline, uploading the result back to S3, and updating DynamoDB/Redis
-    with the outcome. The actual beat detection logic lives entirely in
-    processing/beat_sync.py.
-    """
+
+def process_video(video_id, user_id, raw_key):
     redis_client.set(f"job:{video_id}", "processing")
 
     with tempfile.TemporaryDirectory() as tmp_dir:
@@ -43,8 +44,8 @@ def process_video(video_id, user_id, raw_key):
                 ExpressionAttributeValues={
                     ":status": "done",
                     ":pk": processed_key,
-                    ":bpm": beat_data["bpm"],
-                    ":ts": beat_data["beat_timestamps"],
+                    ":bpm": to_decimal(beat_data["bpm"]),
+                    ":ts": to_decimal(beat_data["beat_timestamps"]),
                     ":counts": beat_data["counts"],
                 },
             )
