@@ -4,9 +4,9 @@
 Choreo Video Library takes an uploaded dance video and makes it easier to break down and learn choreography with counts, custom looping/speed, mirroring, and side-by-side comparison. 
 
 ## Team
-- David Lee
+- [David Lee](https://www.linkedin.com/in/davidlee03/)
 - [Kyle Lin](https://www.linkedin.com/in/kyle-lin-584235295/)
-- Patrick Kumar
+- [Patrick Kumar](https://www.linkedin.com/in/patrick-kumar/)
 
 ## Tech Stack
 - Frontend: React/Vite
