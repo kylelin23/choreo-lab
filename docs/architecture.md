@@ -50,7 +50,12 @@ The backend is written in Python/Flask. Here are the APIs used in the backend:
 - Frontend polling finally succeeds because of updated state in Redis and retrieves processed video from Amazon S3
 
 ### Model
-The model handles the actual video processing. (Will add later)
+- Takes a raw dance video and works out its rhythm.
+- Returns the tempo (BPM), the timestamp of every beat, and the count for each beat (1, 2, 3, 4…).
+- Also saves a copy of the video with those counts shown on screen in time with the music.
+- Uses the librosa library to find the beats, and ClaudeAPI to decide which beat is the "1."
+- Falls back to a simpler rule when no API key is set, so it always produces a result.
+- Can be corrected by teaching it a song it gets wrong.
 
 
 ### Data Storage
