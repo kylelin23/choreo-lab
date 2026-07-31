@@ -12,16 +12,37 @@ import {
 function UploadDance({ email, onLogout }) {
   const [videos, setVideos] = useState([]);
   const [uploading, setUploading] = useState(false);
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [error, setError] = useState("");
   const [selectedVideo, setSelectedVideo] = useState(null);
+  const [selectedVideoId, setSelectedVideoId] = useState(null);
   const [loadingVideo, setLoadingVideo] = useState(false);
+  const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [avatarMenuOpen, setAvatarMenuOpen] = useState(false);
   const fileInputRef = useRef(null);
   const pollRef = useRef(null);
+  const timerRef = useRef(null);
+  const avatarMenuRef = useRef(null);
 
   useEffect(() => {
     refreshVideos();
-    return () => clearInterval(pollRef.current);
+    return () => {
+      clearInterval(pollRef.current);
+      clearInterval(timerRef.current);
+    };
   }, []);
+
+  useEffect(() => {
+    if (!avatarMenuOpen) return;
+    function handleClickOutside(e) {
+      if (avatarMenuRef.current && !avatarMenuRef.current.contains(e.target)) {
+        setAvatarMenuOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [avatarMenuOpen]);
 
   async function refreshVideos() {
     try {
@@ -29,6 +50,8 @@ function UploadDance({ email, onLogout }) {
       setVideos(data.videos || []);
     } catch (err) {
       setError(err.message);
+    } finally {
+      setHasLoadedOnce(true);
     }
   }
 
@@ -41,12 +64,15 @@ function UploadDance({ email, onLogout }) {
     fileInputRef.current?.click();
   };
 
-  const handleFileSelected = async (e) => {
-    const file = e.target.files[0];
+  async function handleUpload(file) {
     if (!file) return;
 
     setError("");
     setUploading(true);
+    setElapsedSeconds(0);
+    timerRef.current = setInterval(() => {
+      setElapsedSeconds((s) => s + 1);
+    }, 1000);
 
     try {
       const { video_id } = await uploadVideo(file);
@@ -55,10 +81,24 @@ function UploadDance({ email, onLogout }) {
     } catch (err) {
       setError(err.message);
       setUploading(false);
-    } finally {
-      e.target.value = "";
+      clearInterval(timerRef.current);
     }
+  }
+
+  const handleFileSelected = async (e) => {
+    const file = e.target.files[0];
+    await handleUpload(file);
+    e.target.value = "";
   };
+
+  const [dragActive, setDragActive] = useState(false);
+
+  function handleDrop(e) {
+    e.preventDefault();
+    setDragActive(false);
+    const file = e.dataTransfer.files?.[0];
+    if (file) handleUpload(file);
+  }
 
   function pollStatus(videoId) {
     pollRef.current = setInterval(async () => {
@@ -66,11 +106,13 @@ function UploadDance({ email, onLogout }) {
         const { status } = await getVideoStatus(videoId);
         if (status === "done" || status === "failed") {
           clearInterval(pollRef.current);
+          clearInterval(timerRef.current);
           setUploading(false);
           await refreshVideos();
         }
       } catch (err) {
         clearInterval(pollRef.current);
+        clearInterval(timerRef.current);
         setUploading(false);
         setError(err.message);
       }
@@ -80,9 +122,11 @@ function UploadDance({ email, onLogout }) {
   async function handleViewVideo(videoId) {
     setError("");
     setLoadingVideo(true);
+    setSelectedVideoId(videoId);
     try {
       const data = await getVideo(videoId);
       setSelectedVideo(data);
+      setMenuOpen(false);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -90,28 +134,71 @@ function UploadDance({ email, onLogout }) {
     }
   }
 
-  function handleCloseViewer() {
-    setSelectedVideo(null);
+  function formatElapsed(seconds) {
+    const m = Math.floor(seconds / 60);
+    const s = seconds % 60;
+    return m > 0 ? `${m}m ${s}s` : `${s}s`;
   }
 
-  if (selectedVideo) {
-    return <DanceViewer video={selectedVideo} onBack={handleCloseViewer} />;
-  }
+  const hasAnyVideos = videos.length > 0;
+  const hasCompletedVideos = videos.some((v) => v.status === "done");
+  const avatarInitial = email ? email[0].toUpperCase() : "?";
 
   return (
-    <div className="page">
-      <div className="home-card">
-        <header className="home-header">
-          <div>
-            <h1>Choreo Video Library</h1>
-            <p className="subtitle">
-              {email ? `Signed in as ${email}` : "Welcome back"}
-            </p>
-          </div>
-          <button className="logout-btn" onClick={handleLogout}>
-            Log out
+    <div className="shell">
+      <header className="topbar">
+        <button
+          className="menu-trigger"
+          onClick={() => setMenuOpen((o) => !o)}
+          aria-label={menuOpen ? "Close menu" : "Select a dance"}
+          aria-expanded={menuOpen}
+        >
+          <ListIcon />
+          {menuOpen ? "Close" : "Select a Dance"}
+        </button>
+        <span className="topbar-brand">
+          <span className="brand-mark" aria-hidden="true" />
+          Choreo
+        </span>
+        <div className="topbar-avatar-wrap" ref={avatarMenuRef}>
+          <button
+            className="topbar-avatar"
+            onClick={() => setAvatarMenuOpen((o) => !o)}
+            aria-label="Account menu"
+            aria-expanded={avatarMenuOpen}
+            title={email}
+          >
+            {avatarInitial}
           </button>
-        </header>
+          {avatarMenuOpen && (
+            <div className="avatar-menu">
+              <p className="avatar-menu-email">{email}</p>
+              <button
+                className="avatar-menu-item"
+                onClick={() => {
+                  setAvatarMenuOpen(false);
+                  handleLogout();
+                }}
+              >
+                <LogoutIcon />
+                Sign out
+              </button>
+            </div>
+          )}
+        </div>
+      </header>
+
+      {menuOpen && (
+        <div className="drawer-backdrop" onClick={() => setMenuOpen(false)} />
+      )}
+
+      <aside className={`drawer ${menuOpen ? "drawer-open" : ""}`}>
+        <div className="drawer-user">
+          <span className="rail-avatar" aria-hidden="true">
+            {avatarInitial}
+          </span>
+          <span className="rail-email">{email}</span>
+        </div>
 
         <input
           type="file"
@@ -126,48 +213,226 @@ function UploadDance({ email, onLogout }) {
           onClick={handleUploadClick}
           disabled={uploading}
         >
-          {uploading ? "Processing..." : "Upload Dance"}
+          {uploading ? (
+            <span className="spinner" aria-hidden="true" />
+          ) : (
+            "+ Upload Dance"
+          )}
         </button>
 
+        {uploading && (
+          <p className="processing-note" aria-live="polite">
+            This can take a minute or two. Elapsed:{" "}
+            <strong>{formatElapsed(elapsedSeconds)}</strong>
+          </p>
+        )}
+
         {error && (
-          <p className="upload-error" aria-live="polite">
+          <p className="upload-error" role="alert" aria-live="polite">
+            <AlertIcon />
             {error}
           </p>
         )}
 
-        <section className="library">
-          <h2>Previously Uploaded Dances</h2>
-          {videos.length === 0 ? (
-            <div className="library-empty">
-              <p>No dances uploaded yet.</p>
+        <nav className="rail-list">
+          <p className="rail-list-label">Your dances</p>
+          {!hasAnyVideos ? (
+            <div className="rail-empty">
+              <FilmIcon />
+              <p>Nothing uploaded yet</p>
             </div>
           ) : (
-            <ul className="video-list">
+            <ul>
               {videos.map((v) => (
-                <li key={v.video_id} className="video-list-item">
-                  <span>{new Date(v.created_at).toLocaleString()}</span>{" "}
-                  <span className={`status-badge status-${v.status}`}>
-                    {v.status}
-                  </span>
-                  {v.status === "done" && (
-                    <button
-                      onClick={() => handleViewVideo(v.video_id)}
-                      disabled={loadingVideo}
-                    >
-                      {loadingVideo ? "Loading..." : "View"}
-                    </button>
-                  )}
+                <li key={v.video_id}>
+                  <button
+                    className={`rail-item ${
+                      v.video_id === selectedVideoId ? "rail-item-active" : ""
+                    }`}
+                    onClick={() =>
+                      v.status === "done" && handleViewVideo(v.video_id)
+                    }
+                    disabled={v.status !== "done"}
+                  >
+                    <span className="rail-item-date">
+                      {v.filename} · {new Date(v.created_at).toLocaleDateString()}
+                    </span>
+                    <span className={`status-badge status-badge-${v.status}`}>
+                      <span className={`status-dot status-dot-${v.status}`} />
+                      {v.status === "processing" ? "processing…" : v.status}
+                    </span>
+                  </button>
                 </li>
               ))}
             </ul>
           )}
-        </section>
-      </div>
+        </nav>
+
+        <button className="rail-logout" onClick={handleLogout}>
+          <LogoutIcon />
+          Log out
+        </button>
+      </aside>
+
+      <main className="stage">
+        {selectedVideo ? (
+          <DanceViewerInline video={selectedVideo} />
+        ) : hasLoadedOnce && !hasAnyVideos ? (
+          <div
+            className={`stage-empty stage-dropzone ${
+              dragActive ? "stage-dropzone-active" : ""
+            }`}
+            onDragOver={(e) => {
+              e.preventDefault();
+              setDragActive(true);
+            }}
+            onDragLeave={() => setDragActive(false)}
+            onDrop={handleDrop}
+          >
+            <span className="stage-empty-icon" aria-hidden="true">
+              <UploadCloudIcon />
+            </span>
+            <h2>Upload your first dance</h2>
+            <p>Drag and drop a video here, or click below to choose a file.</p>
+            <button
+              className="stage-upload-btn"
+              onClick={handleUploadClick}
+              disabled={uploading}
+            >
+              {uploading ? (
+                <span className="spinner" aria-hidden="true" />
+              ) : (
+                "+ Upload Dance"
+              )}
+            </button>
+            <p className="stage-empty-hint">
+              Once it finishes processing, it'll show up here — with mirroring,
+              looping, and speed controls.
+            </p>
+          </div>
+        ) : hasCompletedVideos ? (
+          <div className="stage-empty">
+            <span className="stage-empty-icon" aria-hidden="true">
+              <FilmIcon />
+            </span>
+            <h2>Pick a dance</h2>
+            <p>No dance selected yet. </p>
+          </div>
+        ) : (
+          <div className="stage-empty">
+            <span className="stage-empty-icon" aria-hidden="true">
+              <span className="spinner spinner-dark" />
+            </span>
+            <h2>Still processing</h2>
+            <p>
+              Your upload is being processed — this can take a minute or two.
+              It'll show up here once it's ready.
+            </p>
+          </div>
+        )}
+      </main>
     </div>
   );
 }
 
-function DanceViewer({ video, onBack }) {
+function ListIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <line x1="8" y1="6" x2="21" y2="6" />
+      <line x1="8" y1="12" x2="21" y2="12" />
+      <line x1="8" y1="18" x2="21" y2="18" />
+      <line x1="3" y1="6" x2="3.01" y2="6" />
+      <line x1="3" y1="12" x2="3.01" y2="12" />
+      <line x1="3" y1="18" x2="3.01" y2="18" />
+    </svg>
+  );
+}
+
+function AlertIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <circle cx="12" cy="12" r="10" />
+      <line x1="12" y1="8" x2="12" y2="12" />
+      <line x1="12" y1="16" x2="12.01" y2="16" />
+    </svg>
+  );
+}
+
+function LogoutIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+      <polyline points="16 17 21 12 16 7" />
+      <line x1="21" y1="12" x2="9" y2="12" />
+    </svg>
+  );
+}
+
+function FilmIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <rect x="2" y="3" width="20" height="18" rx="2" ry="2" />
+      <line x1="7" y1="3" x2="7" y2="21" />
+      <line x1="17" y1="3" x2="17" y2="21" />
+      <line x1="2" y1="9" x2="7" y2="9" />
+      <line x1="2" y1="15" x2="7" y2="15" />
+      <line x1="17" y1="9" x2="22" y2="9" />
+      <line x1="17" y1="15" x2="22" y2="15" />
+    </svg>
+  );
+}
+
+function UploadCloudIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M16 16l-4-4-4 4" />
+      <line x1="12" y1="12" x2="12" y2="21" />
+      <path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3" />
+    </svg>
+  );
+}
+
+function DanceViewerInline({ video }) {
   const [speed, setSpeed] = useState(1);
   const [mirrored, setMirrored] = useState(false);
   const [looping, setLooping] = useState(false);
@@ -180,58 +445,55 @@ function DanceViewer({ video, onBack }) {
   }, [speed]);
 
   return (
-    <div className="page">
-      <div className="home-card">
-        <header className="home-header">
-          <button className="logout-btn" onClick={onBack}>
-            Back to Library
-          </button>
-        </header>
-
+    <div className="viewer">
+      <div className="viewer-video-wrap">
         <video
           ref={videoRef}
           src={video.video_url}
           controls
           loop={looping}
           style={{
-            width: "100%",
+            maxWidth: "100%",
+            maxHeight: "100%",
             transform: mirrored ? "scaleX(-1)" : "none",
           }}
         />
+      </div>
 
-        <div className="editor-controls">
-          <label>
-            Speed
-            <select
-              value={speed}
-              onChange={(e) => setSpeed(Number(e.target.value))}
-            >
-              <option value={0.25}>0.25x</option>
-              <option value={0.5}>0.5x</option>
-              <option value={1}>1x</option>
-              <option value={1.5}>1.5x</option>
-              <option value={2}>2x</option>
-            </select>
-          </label>
+      <div className="viewer-controls">
+        <label className="viewer-speed">
+          Speed
+          <select
+            value={speed}
+            onChange={(e) => setSpeed(Number(e.target.value))}
+          >
+            <option value={0.25}>0.25x</option>
+            <option value={0.5}>0.5x</option>
+            <option value={1}>1x</option>
+            <option value={1.5}>1.5x</option>
+            <option value={2}>2x</option>
+          </select>
+        </label>
 
-          <label>
-            <input
-              type="checkbox"
-              checked={mirrored}
-              onChange={(e) => setMirrored(e.target.checked)}
-            />
-            Mirror
-          </label>
+        <button
+          type="button"
+          className={`toggle-pill ${mirrored ? "toggle-pill-active" : ""}`}
+          role="switch"
+          aria-checked={mirrored}
+          onClick={() => setMirrored((m) => !m)}
+        >
+          Mirror
+        </button>
 
-          <label>
-            <input
-              type="checkbox"
-              checked={looping}
-              onChange={(e) => setLooping(e.target.checked)}
-            />
-            Loop
-          </label>
-        </div>
+        <button
+          type="button"
+          className={`toggle-pill ${looping ? "toggle-pill-active" : ""}`}
+          role="switch"
+          aria-checked={looping}
+          onClick={() => setLooping((l) => !l)}
+        >
+          Loop
+        </button>
       </div>
     </div>
   );
