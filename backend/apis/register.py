@@ -14,12 +14,21 @@ def register(email, password):
 
     try:
         users_table.put_item(
-            Item={"email": email, "user_id": user_id,
-                  "password_hash": password_hash},
+            Item={"email": email, "user_id": user_id, "password_hash": password_hash},
             ConditionExpression="attribute_not_exists(email)",
         )
-    except ClientError:
-        return None, None, "an account with this email already exists"
+    except ClientError as e:
+        error_code = e.response.get("Error", {}).get("Code")
+        error_message = e.response.get("Error", {}).get("Message")
+        
+        # Print the REAL error to terminal logs
+        print(f"DynamoDB Error [{error_code}]: {error_message}")
+
+        if error_code == "ConditionalCheckFailedException":
+            return None, None, "an account with this email already exists"
+        
+        # Return the actual database error to the client for debugging
+        return None, None, f"Database Error ({error_code}): {error_message}"
 
     token, _ = issue_token(user_id, email)
     return token, {"user_id": user_id, "email": email}, None
