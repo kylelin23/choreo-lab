@@ -617,11 +617,101 @@ body {
     0 16px 40px rgba(20, 20, 43, 0.08);
 }
 
+.viewer-video-frame {
+  position: relative;
+  overflow: hidden;
+  border-radius: 12px;
+}
+
+.count-overlay {
+  position: absolute;
+  left: 50%;
+  bottom: 8%;
+  transform: translateX(-50%);
+  font-size: clamp(2rem, 6vw, 3.5rem);
+  font-weight: 800;
+  color: #fff;
+  text-shadow:
+    0 0 6px rgba(0, 0, 0, 0.85),
+    0 2px 4px rgba(0, 0, 0, 0.6);
+  pointer-events: none;
+  user-select: none;
+}
+
 .viewer video {
   display: block;
-  border-radius: 12px;
   background: #000;
-  width: 100%;
+  cursor: pointer;
+}
+
+.custom-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin-top: 0.6rem;
+  padding: 0 0.15rem;
+}
+
+.control-btn {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border: none;
+  border-radius: 50%;
+  background: none;
+  color: #3f3f46;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.control-btn svg {
+  width: 16px;
+  height: 16px;
+}
+
+.control-btn:hover {
+  background: #f4f4f6;
+}
+
+.control-time {
+  flex-shrink: 0;
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+  color: #9a9aa2;
+  min-width: 2.4rem;
+  text-align: center;
+}
+
+.control-scrubber {
+  flex: 1;
+  -webkit-appearance: none;
+  appearance: none;
+  height: 4px;
+  border-radius: 999px;
+  background: #e4e4e7;
+  cursor: pointer;
+}
+
+.control-scrubber::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #4f46e5;
+  cursor: pointer;
+}
+
+.control-scrubber::-moz-range-thumb {
+  width: 12px;
+  height: 12px;
+  border: none;
+  border-radius: 50%;
+  background: #4f46e5;
+  cursor: pointer;
 }
 
 .viewer-controls {
