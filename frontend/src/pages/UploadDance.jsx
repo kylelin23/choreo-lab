@@ -157,7 +157,6 @@ function UploadDance({ email, onLogout }) {
           {menuOpen ? "Close" : "Select a Dance"}
         </button>
         <span className="topbar-brand">
-          <span className="brand-mark" aria-hidden="true" />
           Choreo
         </span>
         <div className="topbar-avatar-wrap" ref={avatarMenuRef}>
@@ -255,7 +254,7 @@ function UploadDance({ email, onLogout }) {
                     disabled={v.status !== "done"}
                   >
                     <span className="rail-item-date">
-                      {new Date(v.created_at).toLocaleDateString()}
+                      {v.filename} · {new Date(v.created_at).toLocaleDateString()}
                     </span>
                     <span className={`status-badge status-badge-${v.status}`}>
                       <span className={`status-dot status-dot-${v.status}`} />
@@ -448,6 +447,18 @@ function DanceViewerInline({ video }) {
     }
   }, [speed]);
 
+  useEffect(() => {
+    let frameId;
+    function tick() {
+      if (videoRef.current) {
+        setCurrentTime(videoRef.current.currentTime);
+      }
+      frameId = requestAnimationFrame(tick);
+    }
+    frameId = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(frameId);
+  }, []);
+
   function togglePlay() {
     if (!videoRef.current) return;
     if (videoRef.current.paused) {
@@ -506,7 +517,6 @@ function DanceViewerInline({ video }) {
             src={video.video_url}
             loop={looping}
             onClick={togglePlay}
-            onTimeUpdate={(e) => setCurrentTime(e.target.currentTime)}
             onLoadedMetadata={(e) => setDuration(e.target.duration)}
             onEnded={() => setPlaying(false)}
             style={{
