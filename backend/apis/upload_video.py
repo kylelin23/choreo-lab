@@ -34,6 +34,7 @@ def upload_video(file, user_id):
         "user_id": user_id,
         "status": "processing",
         "raw_key": raw_key,
+        "filename": file.filename,
         "created_at": datetime.now(timezone.utc).isoformat(),
     })
     redis_client.set(f"job:{video_id}", "processing")
