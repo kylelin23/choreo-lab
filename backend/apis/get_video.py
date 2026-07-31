@@ -1,6 +1,6 @@
 from clients import s3_client, videos_table, S3_BUCKET_NAME
 
-# Gets the video from S3
+# Gets video from S3
 
 
 def get_video(video_id, user_id):
@@ -13,7 +13,7 @@ def get_video(video_id, user_id):
         return None, "not authorized to view this video", 403
 
     if item["status"] != "done":
-        return {"status": item["status"]}, None, 425  # Too Early
+        return {"status": item["status"]}, None, 425
 
     presigned_url = s3_client.generate_presigned_url(
         "get_object",
@@ -25,4 +25,7 @@ def get_video(video_id, user_id):
         "video_id": video_id,
         "video_url": presigned_url,
         "created_at": item["created_at"],
+        "bpm": float(item.get("bpm", 0)),
+        "beat_timestamps": [float(t) for t in item.get("beat_timestamps", [])],
+        "counts": [int(c) for c in item.get("counts", [])],
     }, None, 200

@@ -255,7 +255,7 @@ function UploadDance({ email, onLogout }) {
                     disabled={v.status !== "done"}
                   >
                     <span className="rail-item-date">
-                      {v.filename} · {new Date(v.created_at).toLocaleDateString()}
+                      {new Date(v.created_at).toLocaleDateString()}
                     </span>
                     <span className={`status-badge status-badge-${v.status}`}>
                       <span className={`status-dot status-dot-${v.status}`} />
@@ -316,7 +316,7 @@ function UploadDance({ email, onLogout }) {
               <FilmIcon />
             </span>
             <h2>Pick a dance</h2>
-            <p>No dance selected yet. </p>
+            <p>Open the menu and select one to view it here.</p>
           </div>
         ) : (
           <div className="stage-empty">
@@ -436,6 +436,10 @@ function DanceViewerInline({ video }) {
   const [speed, setSpeed] = useState(1);
   const [mirrored, setMirrored] = useState(false);
   const [looping, setLooping] = useState(false);
+  const [playing, setPlaying] = useState(false);
+  const [muted, setMuted] = useState(false);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(0);
   const videoRef = useRef(null);
 
   useEffect(() => {
@@ -444,20 +448,112 @@ function DanceViewerInline({ video }) {
     }
   }, [speed]);
 
+  function togglePlay() {
+    if (!videoRef.current) return;
+    if (videoRef.current.paused) {
+      videoRef.current.play();
+      setPlaying(true);
+    } else {
+      videoRef.current.pause();
+      setPlaying(false);
+    }
+  }
+
+  function handleSeek(e) {
+    const time = Number(e.target.value);
+    if (videoRef.current) {
+      videoRef.current.currentTime = time;
+    }
+    setCurrentTime(time);
+  }
+
+  function toggleMute() {
+    if (!videoRef.current) return;
+    videoRef.current.muted = !videoRef.current.muted;
+    setMuted(videoRef.current.muted);
+  }
+
+  function formatTime(seconds) {
+    if (!Number.isFinite(seconds)) return "0:00";
+    const m = Math.floor(seconds / 60);
+    const s = Math.floor(seconds % 60)
+      .toString()
+      .padStart(2, "0");
+    return `${m}:${s}`;
+  }
+
+  function currentCount() {
+    const timestamps = video.beat_timestamps || [];
+    const counts = video.counts || [];
+    if (timestamps.length === 0) return null;
+
+    let idx = -1;
+    for (let i = 0; i < timestamps.length; i++) {
+      if (timestamps[i] <= currentTime) idx = i;
+      else break;
+    }
+    return idx >= 0 ? counts[idx] : null;
+  }
+
+  const count = currentCount();
+
   return (
     <div className="viewer">
       <div className="viewer-video-wrap">
-        <video
-          ref={videoRef}
-          src={video.video_url}
-          controls
-          loop={looping}
-          style={{
-            maxWidth: "100%",
-            maxHeight: "100%",
-            transform: mirrored ? "scaleX(-1)" : "none",
-          }}
-        />
+        <div className="viewer-video-frame">
+          <video
+            ref={videoRef}
+            src={video.video_url}
+            loop={looping}
+            onClick={togglePlay}
+            onTimeUpdate={(e) => setCurrentTime(e.target.currentTime)}
+            onLoadedMetadata={(e) => setDuration(e.target.duration)}
+            onEnded={() => setPlaying(false)}
+            style={{
+              width: "100%",
+              transform: mirrored ? "scaleX(-1)" : "none",
+            }}
+          />
+          {count !== null && (
+            <span className="count-overlay" aria-hidden="true">
+              {count}
+            </span>
+          )}
+        </div>
+
+        <div className="custom-controls">
+          <button
+            type="button"
+            className="control-btn"
+            onClick={togglePlay}
+            aria-label={playing ? "Pause" : "Play"}
+          >
+            {playing ? <PauseIcon /> : <PlayIcon />}
+          </button>
+
+          <span className="control-time">{formatTime(currentTime)}</span>
+
+          <input
+            type="range"
+            className="control-scrubber"
+            min={0}
+            max={duration || 0}
+            step={0.01}
+            value={currentTime}
+            onChange={handleSeek}
+          />
+
+          <span className="control-time">{formatTime(duration)}</span>
+
+          <button
+            type="button"
+            className="control-btn"
+            onClick={toggleMute}
+            aria-label={muted ? "Unmute" : "Mute"}
+          >
+            {muted ? <MuteIcon /> : <VolumeIcon />}
+          </button>
+        </div>
       </div>
 
       <div className="viewer-controls">
@@ -496,6 +592,59 @@ function DanceViewerInline({ video }) {
         </button>
       </div>
     </div>
+  );
+}
+
+function PlayIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+      <polygon points="6 3 20 12 6 21 6 3" />
+    </svg>
+  );
+}
+
+function PauseIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+      <rect x="6" y="4" width="4" height="16" />
+      <rect x="14" y="4" width="4" height="16" />
+    </svg>
+  );
+}
+
+function VolumeIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
+      <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />
+      <path d="M19.07 4.93a10 10 0 0 1 0 14.14" />
+    </svg>
+  );
+}
+
+function MuteIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
+      <line x1="23" y1="9" x2="17" y2="15" />
+      <line x1="17" y1="9" x2="23" y2="15" />
+    </svg>
   );
 }
 
