@@ -11,8 +11,9 @@
 # This dictionary will be used by the frontend later to edit the video
 """backend/processing/beat_sync.py
 
-Detect the beat grid of a dance video, burn count numbers onto it, and return
-the data the frontend edits from.
+Detect the beat grid of a dance video, write a clean processed copy of it, and
+return the beat/count data the frontend edits from. The count numbers are drawn
+by the frontend, not burned into the video here.
 
     result = detect_beats_and_sync("raw.mp4", "processed.mp4")
     # -> {"bpm": 128.0, "beat_timestamps": [0.47, 0.94, ...], "counts": [1,2,3,4,1,2,3,4,...]}
@@ -29,18 +30,16 @@ When it mislabels a song, correct it once and it learns:
     from backend.processing.beat_sync import add_example
     add_example("that_song.mp4", first_one_index=3, rationale="intro has a 3-beat pickup")
 
-Dependencies: librosa, numpy, opencv-python, anthropic. ffmpeg (on PATH) keeps
-the audio and encodes H.264; without it you still get a silent annotated video.
+Dependencies: librosa, numpy, anthropic. ffmpeg (on PATH) transcodes the output
+to web-friendly H.264/AAC; without it the source video is copied through as-is.
 """
 
 from __future__ import annotations
 
-import bisect
 import json
 import os
 import shutil
 import subprocess
-import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -137,7 +136,7 @@ def detect_beats_and_sync(input_path: str, output_path: str) -> dict:
         print(f"[beat_sync] downbeat via {detector}, phase {phase}, "
               f"{len(facts.beats)} beats @ {facts.bpm:.1f} bpm")
 
-    _render_video(input_path, output_path, beat_times, counts)
+    _write_output(input_path, output_path)
 
     return {
         "bpm": round(float(facts.bpm), 2),
@@ -378,73 +377,35 @@ def add_example(
 
 
 # --------------------------------------------------------------------------- #
-# The Hands: burn counts onto the video
+# The Hands: write the processed video (the frontend draws the counts)
 # --------------------------------------------------------------------------- #
-def _render_video(input_path: str, output_path: str,
-                  beat_times: list[float], counts: list[int]) -> None:
-    import cv2
+def _write_output(input_path: str, output_path: str) -> None:
+    """Write the source video to output_path in a web-friendly form.
 
-    cap = cv2.VideoCapture(input_path)
-    if not cap.isOpened():
-        raise RuntimeError(f"could not open video: {input_path}")
+    Count numbers are no longer burned in here — the frontend overlays them from
+    the returned beat_timestamps/counts. We just hand back a clean, playable
+    copy: an H.264/AAC transcode (with faststart for streaming) when ffmpeg is
+    available, otherwise a straight copy of the original file.
+    """
+    out = Path(output_path)
+    out.parent.mkdir(parents=True, exist_ok=True)
 
-    fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
-    width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-    height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-
-    tmp_silent = tempfile.mktemp(suffix=".mp4")
-    writer = cv2.VideoWriter(tmp_silent, cv2.VideoWriter_fourcc(*"mp4v"),
-                             fps, (width, height))
-    frame_idx = 0
-    try:
-        while True:
-            ok, frame = cap.read()
-            if not ok:
-                break
-            t = frame_idx / fps
-            i = bisect.bisect_right(beat_times, t) - 1
-            if 0 <= i < len(counts):
-                on_beat = abs(t - beat_times[i]) < 0.12
-                _draw_count(cv2, frame, counts[i], width, height, on_beat)
-            writer.write(frame)
-            frame_idx += 1
-    finally:
-        cap.release()
-        writer.release()
-
-    _finalize(tmp_silent, input_path, output_path)
-
-
-def _draw_count(cv2, frame, count: int, width: int, height: int, on_beat: bool) -> None:
-    text = str(count)
-    scale = height / 180.0
-    thickness = max(2, int(scale * 2))
-    (tw, th), _ = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX, scale, thickness)
-    org = ((width - tw) // 2, height - int(height * 0.08))
-    color = (255, 255, 255) if on_beat else (200, 200, 200)
-    cv2.putText(frame, text, org, cv2.FONT_HERSHEY_SIMPLEX, scale, (0, 0, 0),
-                thickness + 3, cv2.LINE_AA)
-    cv2.putText(frame, text, org, cv2.FONT_HERSHEY_SIMPLEX, scale, color,
-                thickness, cv2.LINE_AA)
-
-
-def _finalize(silent_video: str, source_video: str, output_path: str) -> None:
-    Path(output_path).parent.mkdir(parents=True, exist_ok=True)
-    if not shutil.which("ffmpeg"):
-        shutil.move(silent_video, output_path)
+    # Nothing to do if the caller points input and output at the same file.
+    if out.resolve() == Path(input_path).resolve():
         return
-    cmd = [
-        "ffmpeg", "-y",
-        "-i", silent_video, "-i", source_video,
-        "-map", "0:v:0", "-map", "1:a:0?",
-        "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac", "-shortest",
-        output_path,
-    ]
-    result = subprocess.run(cmd, capture_output=True)
-    if result.returncode != 0 or not Path(output_path).exists():
-        shutil.move(silent_video, output_path)
-    else:
-        Path(silent_video).unlink(missing_ok=True)
+
+    if shutil.which("ffmpeg"):
+        cmd = [
+            "ffmpeg", "-y", "-i", input_path,
+            "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac",
+            "-movflags", "+faststart",
+            output_path,
+        ]
+        result = subprocess.run(cmd, capture_output=True)
+        if result.returncode == 0 and out.exists():
+            return  # transcoded successfully
+
+    shutil.copyfile(input_path, output_path)  # fallback: copy the source through
 
 
 if __name__ == "__main__":
