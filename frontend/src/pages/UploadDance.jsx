@@ -156,9 +156,7 @@ function UploadDance({ email, onLogout }) {
           <ListIcon />
           {menuOpen ? "Close" : "Select a Dance"}
         </button>
-        <span className="topbar-brand">
-          Choreo
-        </span>
+        <span className="topbar-brand">Choreo</span>
         <div className="topbar-avatar-wrap" ref={avatarMenuRef}>
           <button
             className="topbar-avatar"
@@ -254,7 +252,8 @@ function UploadDance({ email, onLogout }) {
                     disabled={v.status !== "done"}
                   >
                     <span className="rail-item-date">
-                      {v.filename} · {new Date(v.created_at).toLocaleDateString()}
+                      {v.filename} ·{" "}
+                      {new Date(v.created_at).toLocaleDateString()}
                     </span>
                     <span className={`status-badge status-badge-${v.status}`}>
                       <span className={`status-dot status-dot-${v.status}`} />
@@ -275,7 +274,10 @@ function UploadDance({ email, onLogout }) {
 
       <main className="stage">
         {selectedVideo ? (
-          <DanceViewerInline video={selectedVideo} />
+          <DanceViewerInline
+            key={selectedVideo.video_id}
+            video={selectedVideo}
+          />
         ) : hasLoadedOnce && !hasAnyVideos ? (
           <div
             className={`stage-empty stage-dropzone ${
@@ -439,7 +441,15 @@ function DanceViewerInline({ video }) {
   const [muted, setMuted] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
+
+  // Loop-a-section state
+  const [loopStart, setLoopStart] = useState(null);
+  const [loopEnd, setLoopEnd] = useState(null);
+  const [sectionLooping, setSectionLooping] = useState(false);
+  const [draggingMarker, setDraggingMarker] = useState(null);
+
   const videoRef = useRef(null);
+  const scrubberWrapRef = useRef(null);
 
   useEffect(() => {
     if (videoRef.current) {
@@ -451,13 +461,54 @@ function DanceViewerInline({ video }) {
     let frameId;
     function tick() {
       if (videoRef.current) {
-        setCurrentTime(videoRef.current.currentTime);
+        const t = videoRef.current.currentTime;
+        setCurrentTime(t);
+
+        if (
+          sectionLooping &&
+          loopStart !== null &&
+          loopEnd !== null &&
+          t >= loopEnd
+        ) {
+          videoRef.current.currentTime = loopStart;
+        }
       }
       frameId = requestAnimationFrame(tick);
     }
     frameId = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(frameId);
-  }, []);
+  }, [sectionLooping, loopStart, loopEnd]);
+
+  useEffect(() => {
+    if (!draggingMarker) return;
+
+    function handleMove(e) {
+      if (!scrubberWrapRef.current || duration <= 0) return;
+      const rect = scrubberWrapRef.current.getBoundingClientRect();
+      const clientX = e.clientX ?? (e.touches && e.touches[0]?.clientX);
+      if (clientX == null) return;
+      let frac = (clientX - rect.left) / rect.width;
+      frac = Math.min(1, Math.max(0, frac));
+      const t = frac * duration;
+
+      if (draggingMarker === "start") {
+        setLoopStart(Math.min(t, loopEnd !== null ? loopEnd - 0.1 : duration));
+      } else {
+        setLoopEnd(Math.max(t, loopStart !== null ? loopStart + 0.1 : 0));
+      }
+    }
+
+    function handleUp() {
+      setDraggingMarker(null);
+    }
+
+    window.addEventListener("pointermove", handleMove);
+    window.addEventListener("pointerup", handleUp);
+    return () => {
+      window.removeEventListener("pointermove", handleMove);
+      window.removeEventListener("pointerup", handleUp);
+    };
+  }, [draggingMarker, duration, loopStart, loopEnd]);
 
   function togglePlay() {
     if (!videoRef.current) return;
@@ -484,6 +535,31 @@ function DanceViewerInline({ video }) {
     setMuted(videoRef.current.muted);
   }
 
+  function markLoopStart() {
+    const t = videoRef.current ? videoRef.current.currentTime : currentTime;
+    if (loopEnd !== null && t >= loopEnd) {
+      // keep the range valid — push end forward slightly
+      setLoopEnd(Math.min(duration, t + 1));
+    }
+    setLoopStart(t);
+    setSectionLooping(true);
+  }
+
+  function markLoopEnd() {
+    const t = videoRef.current ? videoRef.current.currentTime : currentTime;
+    if (loopStart !== null && t <= loopStart) {
+      setLoopStart(Math.max(0, t - 1));
+    }
+    setLoopEnd(t);
+    setSectionLooping(true);
+  }
+
+  function clearLoopSection() {
+    setLoopStart(null);
+    setLoopEnd(null);
+    setSectionLooping(false);
+  }
+
   function formatTime(seconds) {
     if (!Number.isFinite(seconds)) return "0:00";
     const m = Math.floor(seconds / 60);
@@ -507,6 +583,7 @@ function DanceViewerInline({ video }) {
   }
 
   const count = currentCount();
+  const hasLoopRange = loopStart !== null && loopEnd !== null;
 
   return (
     <div className="viewer">
@@ -515,12 +592,15 @@ function DanceViewerInline({ video }) {
           <video
             ref={videoRef}
             src={video.video_url}
-            loop={looping}
+            loop={looping && !sectionLooping}
             onClick={togglePlay}
             onLoadedMetadata={(e) => setDuration(e.target.duration)}
             onEnded={() => setPlaying(false)}
             style={{
-              width: "100%",
+              maxWidth: "100%",
+              maxHeight: "75vh",
+              width: "auto",
+              height: "auto",
               transform: mirrored ? "scaleX(-1)" : "none",
             }}
           />
@@ -543,15 +623,48 @@ function DanceViewerInline({ video }) {
 
           <span className="control-time">{formatTime(currentTime)}</span>
 
-          <input
-            type="range"
-            className="control-scrubber"
-            min={0}
-            max={duration || 0}
-            step={0.01}
-            value={currentTime}
-            onChange={handleSeek}
-          />
+          <div className="scrubber-wrap" ref={scrubberWrapRef}>
+            {hasLoopRange && duration > 0 && (
+              <div
+                className="loop-range-highlight"
+                style={{
+                  left: `${(loopStart / duration) * 100}%`,
+                  width: `${((loopEnd - loopStart) / duration) * 100}%`,
+                }}
+              />
+            )}
+            {loopStart !== null && duration > 0 && (
+              <div
+                className="loop-marker loop-marker-start"
+                style={{ left: `${(loopStart / duration) * 100}%` }}
+                title={`Loop start: ${formatTime(loopStart)} — drag to adjust`}
+                onPointerDown={(e) => {
+                  e.preventDefault();
+                  setDraggingMarker("start");
+                }}
+              />
+            )}
+            {loopEnd !== null && duration > 0 && (
+              <div
+                className="loop-marker loop-marker-end"
+                style={{ left: `${(loopEnd / duration) * 100}%` }}
+                title={`Loop end: ${formatTime(loopEnd)} — drag to adjust`}
+                onPointerDown={(e) => {
+                  e.preventDefault();
+                  setDraggingMarker("end");
+                }}
+              />
+            )}
+            <input
+              type="range"
+              className="control-scrubber"
+              min={0}
+              max={duration || 0}
+              step={0.01}
+              value={currentTime}
+              onChange={handleSeek}
+            />
+          </div>
 
           <span className="control-time">{formatTime(duration)}</span>
 
@@ -563,6 +676,46 @@ function DanceViewerInline({ video }) {
           >
             {muted ? <MuteIcon /> : <VolumeIcon />}
           </button>
+        </div>
+
+        <div className="loop-section-controls">
+          <button
+            type="button"
+            className="loop-mark-btn"
+            onClick={markLoopStart}
+          >
+            Set start
+          </button>
+          <button type="button" className="loop-mark-btn" onClick={markLoopEnd}>
+            Set end
+          </button>
+
+          {hasLoopRange && (
+            <>
+              <span className="loop-range-label">
+                {formatTime(loopStart)}–{formatTime(loopEnd)}
+              </span>
+              <button
+                type="button"
+                className={`toggle-pill ${
+                  sectionLooping ? "toggle-pill-active" : ""
+                }`}
+                role="switch"
+                aria-checked={sectionLooping}
+                onClick={() => setSectionLooping((s) => !s)}
+              >
+                Loop section
+              </button>
+              <button
+                type="button"
+                className="loop-clear-btn"
+                onClick={clearLoopSection}
+                aria-label="Clear loop section"
+              >
+                Clear
+              </button>
+            </>
+          )}
         </div>
       </div>
 
@@ -593,12 +746,22 @@ function DanceViewerInline({ video }) {
 
         <button
           type="button"
-          className={`toggle-pill ${looping ? "toggle-pill-active" : ""}`}
+          className={`toggle-pill ${
+            looping && !(sectionLooping && hasLoopRange)
+              ? "toggle-pill-active"
+              : ""
+          }`}
           role="switch"
           aria-checked={looping}
           onClick={() => setLooping((l) => !l)}
+          disabled={sectionLooping && hasLoopRange}
+          title={
+            sectionLooping && hasLoopRange
+              ? "Clear the loop section to use whole-video loop"
+              : undefined
+          }
         >
-          Loop
+          Loop video
         </button>
       </div>
     </div>
