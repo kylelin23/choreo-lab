@@ -39,7 +39,7 @@ function Auth({ mode, email, setEmail, onSuccess }) {
           <span className="brand-mark" aria-hidden="true" />
           <h1 className="brand-title">Choreo Video Library</h1>
           <p className="brand-description">
-            Upload a dance video and break down choreography with counts, custom
+            Upload a non-copyrighted dance video and break down choreography with counts, custom
             looping/speed, mirroring, and side-by-side comparison.
           </p>
         </div>

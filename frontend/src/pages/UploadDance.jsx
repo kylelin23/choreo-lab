@@ -109,6 +109,11 @@ function UploadDance({ email, onLogout }) {
           clearInterval(timerRef.current);
           setUploading(false);
           await refreshVideos();
+          if (status === "done") {
+            // Jump straight into the freshly processed video instead of
+            // leaving the user to find it in the menu themselves.
+            handleViewVideo(videoId);
+          }
         }
       } catch (err) {
         clearInterval(pollRef.current);
@@ -294,7 +299,10 @@ function UploadDance({ email, onLogout }) {
               <UploadCloudIcon />
             </span>
             <h2>Upload your first dance</h2>
-            <p>Drag and drop a video here, or click below to choose a file.</p>
+            <p>
+              Drag and drop a non-copyrighted video here, or click below to
+              choose a file.
+            </p>
             <button
               className="stage-upload-btn"
               onClick={handleUploadClick}
@@ -306,10 +314,6 @@ function UploadDance({ email, onLogout }) {
                 "+ Upload Dance"
               )}
             </button>
-            <p className="stage-empty-hint">
-              Once it finishes processing, it'll show up here — with mirroring,
-              looping, and speed controls.
-            </p>
           </div>
         ) : hasCompletedVideos ? (
           <div className="stage-empty">
@@ -433,14 +437,20 @@ function UploadCloudIcon() {
   );
 }
 
+const SPEED_PRESETS = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2];
+
 function DanceViewerInline({ video }) {
   const [speed, setSpeed] = useState(1);
+  const [customSpeedMode, setCustomSpeedMode] = useState(false);
+  const [customSpeedInput, setCustomSpeedInput] = useState("");
   const [mirrored, setMirrored] = useState(false);
   const [looping, setLooping] = useState(false);
   const [playing, setPlaying] = useState(false);
   const [muted, setMuted] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
+  const [showCounts, setShowCounts] = useState(true);
+  const [isFullscreen, setIsFullscreen] = useState(false);
 
   // Loop-a-section state
   const [loopStart, setLoopStart] = useState(null);
@@ -510,6 +520,15 @@ function DanceViewerInline({ video }) {
     };
   }, [draggingMarker, duration, loopStart, loopEnd]);
 
+  useEffect(() => {
+    function handleFullscreenChange() {
+      setIsFullscreen(document.fullscreenElement === videoRef.current);
+    }
+    document.addEventListener("fullscreenchange", handleFullscreenChange);
+    return () =>
+      document.removeEventListener("fullscreenchange", handleFullscreenChange);
+  }, []);
+
   function togglePlay() {
     if (!videoRef.current) return;
     if (videoRef.current.paused) {
@@ -533,6 +552,48 @@ function DanceViewerInline({ video }) {
     if (!videoRef.current) return;
     videoRef.current.muted = !videoRef.current.muted;
     setMuted(videoRef.current.muted);
+  }
+
+  function toggleFullscreen() {
+    if (!videoRef.current) return;
+    if (document.fullscreenElement) {
+      document.exitFullscreen?.();
+    } else {
+      videoRef.current.requestFullscreen?.();
+    }
+  }
+
+  function handleSpeedSelect(e) {
+    const val = e.target.value;
+    if (val === "custom") {
+      setCustomSpeedMode(true);
+      const num = parseFloat(customSpeedInput);
+      if (!Number.isNaN(num) && num > 0) {
+        setSpeed(num);
+      }
+    } else {
+      setCustomSpeedMode(false);
+      setSpeed(Number(val));
+    }
+  }
+
+  function handleCustomSpeedChange(e) {
+    const val = e.target.value;
+
+    // Allow clearing the field while typing, but never accept a value
+    // that isn't a strictly positive number (blocks "-", "0", "-1", etc.)
+    if (val === "") {
+      setCustomSpeedInput(val);
+      return;
+    }
+
+    const num = parseFloat(val);
+    if (Number.isNaN(num) || num <= 0) {
+      return;
+    }
+
+    setCustomSpeedInput(val);
+    setSpeed(num);
   }
 
   function markLoopStart() {
@@ -584,6 +645,7 @@ function DanceViewerInline({ video }) {
 
   const count = currentCount();
   const hasLoopRange = loopStart !== null && loopEnd !== null;
+  const isPresetSpeed = SPEED_PRESETS.includes(speed) && !customSpeedMode;
 
   return (
     <div className="viewer">
@@ -604,7 +666,7 @@ function DanceViewerInline({ video }) {
               transform: mirrored ? "scaleX(-1)" : "none",
             }}
           />
-          {count !== null && (
+          {showCounts && count !== null && (
             <span className="count-overlay" aria-hidden="true">
               {count}
             </span>
@@ -676,6 +738,15 @@ function DanceViewerInline({ video }) {
           >
             {muted ? <MuteIcon /> : <VolumeIcon />}
           </button>
+
+          <button
+            type="button"
+            className="control-btn"
+            onClick={toggleFullscreen}
+            aria-label={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
+          >
+            {isFullscreen ? <FullscreenExitIcon /> : <FullscreenIcon />}
+          </button>
         </div>
 
         <div className="loop-section-controls">
@@ -723,16 +794,42 @@ function DanceViewerInline({ video }) {
         <label className="viewer-speed">
           Speed
           <select
-            value={speed}
-            onChange={(e) => setSpeed(Number(e.target.value))}
+            value={isPresetSpeed ? speed : "custom"}
+            onChange={handleSpeedSelect}
           >
-            <option value={0.25}>0.25x</option>
-            <option value={0.5}>0.5x</option>
-            <option value={1}>1x</option>
-            <option value={1.5}>1.5x</option>
-            <option value={2}>2x</option>
+            {SPEED_PRESETS.map((s) => (
+              <option key={s} value={s}>
+                {s}x
+              </option>
+            ))}
+            <option value="custom">Custom…</option>
           </select>
         </label>
+
+        {customSpeedMode && (
+          <label className="viewer-speed-custom">
+            <input
+              type="number"
+              min="0.05"
+              step="0.05"
+              inputMode="decimal"
+              placeholder={String(speed)}
+              value={customSpeedInput}
+              onChange={handleCustomSpeedChange}
+            />
+            x
+          </label>
+        )}
+
+        <button
+          type="button"
+          className={`toggle-pill ${showCounts ? "toggle-pill-active" : ""}`}
+          role="switch"
+          aria-checked={showCounts}
+          onClick={() => setShowCounts((c) => !c)}
+        >
+          Counts
+        </button>
 
         <button
           type="button"
@@ -817,6 +914,44 @@ function MuteIcon() {
       <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
       <line x1="23" y1="9" x2="17" y2="15" />
       <line x1="17" y1="9" x2="23" y2="15" />
+    </svg>
+  );
+}
+
+function FullscreenIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <polyline points="15 3 21 3 21 9" />
+      <polyline points="9 21 3 21 3 15" />
+      <line x1="21" y1="3" x2="14" y2="10" />
+      <line x1="3" y1="21" x2="10" y2="14" />
+    </svg>
+  );
+}
+
+function FullscreenExitIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <polyline points="9 3 9 9 3 9" />
+      <polyline points="15 21 15 15 21 15" />
+      <line x1="9" y1="9" x2="3" y2="3" />
+      <line x1="15" y1="15" x2="21" y2="21" />
     </svg>
   );
 }
