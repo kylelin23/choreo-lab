@@ -439,6 +439,15 @@ function UploadCloudIcon() {
 
 const SPEED_PRESETS = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2];
 
+function getBeatIndex(t, timestamps) {
+  let idx = -1;
+  for (let i = 0; i < timestamps.length; i++) {
+    if (timestamps[i] <= t) idx = i;
+    else break;
+  }
+  return idx;
+}
+
 function DanceViewerInline({ video }) {
   const [speed, setSpeed] = useState(1);
   const [customSpeedMode, setCustomSpeedMode] = useState(false);
@@ -451,12 +460,18 @@ function DanceViewerInline({ video }) {
   const [duration, setDuration] = useState(0);
   const [showCounts, setShowCounts] = useState(true);
   const [isFullscreen, setIsFullscreen] = useState(false);
-
-  // Loop-a-section state
   const [loopStart, setLoopStart] = useState(null);
   const [loopEnd, setLoopEnd] = useState(null);
   const [sectionLooping, setSectionLooping] = useState(false);
   const [draggingMarker, setDraggingMarker] = useState(null);
+  const beatTimestamps = video.beat_timestamps || [];
+  const beatCounts = video.counts || [];
+  const [slideshowOn, setSlideshowOn] = useState(false);
+  const [slideshowIndex, setSlideshowIndex] = useState(0);
+  const [slideshowFrame, setSlideshowFrame] = useState(null);
+  const [slideshowLoading, setSlideshowLoading] = useState(false);
+  const canvasRef = useRef(null);
+  const frameCacheRef = useRef({}); // beat index -> captured data URL
 
   const videoRef = useRef(null);
   const scrubberWrapRef = useRef(null);
@@ -466,6 +481,98 @@ function DanceViewerInline({ video }) {
       videoRef.current.playbackRate = speed;
     }
   }, [speed]);
+
+  function captureAndCacheFrame(idx) {
+    const v = videoRef.current;
+    const canvas = canvasRef.current;
+    if (!v || !canvas || !v.videoWidth) return;
+    canvas.width = v.videoWidth;
+    canvas.height = v.videoHeight;
+    const ctx = canvas.getContext("2d");
+    ctx.drawImage(v, 0, 0, canvas.width, canvas.height);
+    try {
+      const dataUrl = canvas.toDataURL("image/jpeg", 0.85);
+      frameCacheRef.current[idx] = dataUrl;
+      setSlideshowFrame(dataUrl);
+    } catch {
+      // Canvas is "tainted" — the video isn't served with CORS headers
+      // that allow pixel reads. Nothing to do but skip this frame.
+    }
+  }
+
+  // Seek to (and capture) the beat at `slideshowIndex`, using the cache
+  // when we've already visited it.
+  useEffect(() => {
+    if (!slideshowOn) return;
+    if (slideshowIndex < 0 || slideshowIndex >= beatTimestamps.length) return;
+
+    const cached = frameCacheRef.current[slideshowIndex];
+    if (cached) {
+      setSlideshowFrame(cached);
+      return;
+    }
+
+    const v = videoRef.current;
+    if (!v) return;
+
+    setSlideshowLoading(true);
+    const target = beatTimestamps[slideshowIndex];
+
+    function onSeeked() {
+      v.removeEventListener("seeked", onSeeked);
+      captureAndCacheFrame(slideshowIndex);
+      setSlideshowLoading(false);
+    }
+
+    v.addEventListener("seeked", onSeeked);
+    v.currentTime = target;
+
+    return () => v.removeEventListener("seeked", onSeeked);
+  }, [slideshowOn, slideshowIndex, beatTimestamps.length]);
+
+  function goToSlideshowIndex(idx) {
+    const len = beatTimestamps.length;
+    if (len === 0) return;
+    setSlideshowIndex(((idx % len) + len) % len);
+  }
+
+  function handleToggleSlideshow() {
+    setSlideshowOn((prev) => {
+      const next = !prev;
+      if (next) {
+        videoRef.current?.pause();
+        setPlaying(false);
+        const startIdx = Math.max(
+          0,
+          getBeatIndex(
+            videoRef.current?.currentTime ?? currentTime,
+            beatTimestamps,
+          ),
+        );
+        setSlideshowIndex(startIdx);
+      }
+      return next;
+    });
+  }
+
+  // Arrow-key navigation while the slideshow is active — wraps around
+  // from the last count back to the first, and vice versa.
+  useEffect(() => {
+    if (!slideshowOn) return;
+    function handleKeyDown(e) {
+      const len = beatTimestamps.length;
+      if (len === 0) return;
+      if (e.key === "ArrowRight") {
+        e.preventDefault();
+        setSlideshowIndex((i) => (i + 1) % len);
+      } else if (e.key === "ArrowLeft") {
+        e.preventDefault();
+        setSlideshowIndex((i) => (i - 1 + len) % len);
+      }
+    }
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [slideshowOn, beatTimestamps.length]);
 
   useEffect(() => {
     let frameId;
@@ -580,8 +687,6 @@ function DanceViewerInline({ video }) {
   function handleCustomSpeedChange(e) {
     const val = e.target.value;
 
-    // Allow clearing the field while typing, but never accept a value
-    // that isn't a strictly positive number (blocks "-", "0", "-1", etc.)
     if (val === "") {
       setCustomSpeedInput(val);
       return;
@@ -631,21 +736,19 @@ function DanceViewerInline({ video }) {
   }
 
   function currentCount() {
-    const timestamps = video.beat_timestamps || [];
-    const counts = video.counts || [];
-    if (timestamps.length === 0) return null;
-
-    let idx = -1;
-    for (let i = 0; i < timestamps.length; i++) {
-      if (timestamps[i] <= currentTime) idx = i;
-      else break;
-    }
-    return idx >= 0 ? counts[idx] : null;
+    if (beatTimestamps.length === 0) return null;
+    const idx = getBeatIndex(currentTime, beatTimestamps);
+    return idx >= 0 ? beatCounts[idx] : null;
   }
 
   const count = currentCount();
   const hasLoopRange = loopStart !== null && loopEnd !== null;
   const isPresetSpeed = SPEED_PRESETS.includes(speed) && !customSpeedMode;
+
+  const slideshowCount =
+    slideshowOn && beatCounts[slideshowIndex] != null
+      ? beatCounts[slideshowIndex]
+      : null;
 
   return (
     <div className="viewer">
@@ -654,8 +757,9 @@ function DanceViewerInline({ video }) {
           <video
             ref={videoRef}
             src={video.video_url}
+            crossOrigin="anonymous"
             loop={looping && !sectionLooping}
-            onClick={togglePlay}
+            onClick={!slideshowOn ? togglePlay : undefined}
             onLoadedMetadata={(e) => setDuration(e.target.duration)}
             onEnded={() => setPlaying(false)}
             style={{
@@ -664,131 +768,194 @@ function DanceViewerInline({ video }) {
               width: "auto",
               height: "auto",
               transform: mirrored ? "scaleX(-1)" : "none",
+              opacity: slideshowOn ? 0 : 1,
+              pointerEvents: slideshowOn ? "none" : "auto",
             }}
           />
-          {showCounts && count !== null && (
+
+          {!slideshowOn && showCounts && count !== null && (
             <span className="count-overlay" aria-hidden="true">
               {count}
             </span>
           )}
-        </div>
 
-        <div className="custom-controls">
-          <button
-            type="button"
-            className="control-btn"
-            onClick={togglePlay}
-            aria-label={playing ? "Pause" : "Play"}
-          >
-            {playing ? <PauseIcon /> : <PlayIcon />}
-          </button>
-
-          <span className="control-time">{formatTime(currentTime)}</span>
-
-          <div className="scrubber-wrap" ref={scrubberWrapRef}>
-            {hasLoopRange && duration > 0 && (
-              <div
-                className="loop-range-highlight"
-                style={{
-                  left: `${(loopStart / duration) * 100}%`,
-                  width: `${((loopEnd - loopStart) / duration) * 100}%`,
-                }}
-              />
-            )}
-            {loopStart !== null && duration > 0 && (
-              <div
-                className="loop-marker loop-marker-start"
-                style={{ left: `${(loopStart / duration) * 100}%` }}
-                title={`Loop start: ${formatTime(loopStart)} — drag to adjust`}
-                onPointerDown={(e) => {
-                  e.preventDefault();
-                  setDraggingMarker("start");
-                }}
-              />
-            )}
-            {loopEnd !== null && duration > 0 && (
-              <div
-                className="loop-marker loop-marker-end"
-                style={{ left: `${(loopEnd / duration) * 100}%` }}
-                title={`Loop end: ${formatTime(loopEnd)} — drag to adjust`}
-                onPointerDown={(e) => {
-                  e.preventDefault();
-                  setDraggingMarker("end");
-                }}
-              />
-            )}
-            <input
-              type="range"
-              className="control-scrubber"
-              min={0}
-              max={duration || 0}
-              step={0.01}
-              value={currentTime}
-              onChange={handleSeek}
-            />
-          </div>
-
-          <span className="control-time">{formatTime(duration)}</span>
-
-          <button
-            type="button"
-            className="control-btn"
-            onClick={toggleMute}
-            aria-label={muted ? "Unmute" : "Mute"}
-          >
-            {muted ? <MuteIcon /> : <VolumeIcon />}
-          </button>
-
-          <button
-            type="button"
-            className="control-btn"
-            onClick={toggleFullscreen}
-            aria-label={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
-          >
-            {isFullscreen ? <FullscreenExitIcon /> : <FullscreenIcon />}
-          </button>
-        </div>
-
-        <div className="loop-section-controls">
-          <button
-            type="button"
-            className="loop-mark-btn"
-            onClick={markLoopStart}
-          >
-            Set start
-          </button>
-          <button type="button" className="loop-mark-btn" onClick={markLoopEnd}>
-            Set end
-          </button>
-
-          {hasLoopRange && (
-            <>
-              <span className="loop-range-label">
-                {formatTime(loopStart)}–{formatTime(loopEnd)}
-              </span>
-              <button
-                type="button"
-                className={`toggle-pill ${
-                  sectionLooping ? "toggle-pill-active" : ""
-                }`}
-                role="switch"
-                aria-checked={sectionLooping}
-                onClick={() => setSectionLooping((s) => !s)}
-              >
-                Loop section
-              </button>
-              <button
-                type="button"
-                className="loop-clear-btn"
-                onClick={clearLoopSection}
-                aria-label="Clear loop section"
-              >
-                Clear
-              </button>
-            </>
+          {slideshowOn && (
+            <div className="slideshow-overlay">
+              {slideshowLoading || !slideshowFrame ? (
+                <div className="slideshow-loading">
+                  <span className="spinner spinner-dark" />
+                </div>
+              ) : (
+                <img
+                  src={slideshowFrame}
+                  alt={`Count ${slideshowCount ?? slideshowIndex + 1}`}
+                  className="slideshow-img"
+                  style={{ transform: mirrored ? "scaleX(-1)" : "none" }}
+                />
+              )}
+              {showCounts && slideshowCount !== null && (
+                <span className="count-overlay" aria-hidden="true">
+                  {slideshowCount}
+                </span>
+              )}
+            </div>
           )}
         </div>
+
+        {slideshowOn ? (
+          <div className="slideshow-nav">
+            <button
+              type="button"
+              className="control-btn"
+              onClick={() => goToSlideshowIndex(slideshowIndex - 1)}
+              disabled={beatTimestamps.length === 0}
+              aria-label="Previous count"
+            >
+              <ChevronLeftIcon />
+            </button>
+            <span className="slideshow-position">
+              {beatTimestamps.length > 0
+                ? `Count ${slideshowIndex + 1} of ${beatTimestamps.length}`
+                : "No counts detected for this video"}
+            </span>
+            <button
+              type="button"
+              className="control-btn"
+              onClick={() => goToSlideshowIndex(slideshowIndex + 1)}
+              disabled={beatTimestamps.length === 0}
+              aria-label="Next count"
+            >
+              <ChevronRightIcon />
+            </button>
+          </div>
+        ) : (
+          <>
+            <div className="custom-controls">
+              <button
+                type="button"
+                className="control-btn"
+                onClick={togglePlay}
+                aria-label={playing ? "Pause" : "Play"}
+              >
+                {playing ? <PauseIcon /> : <PlayIcon />}
+              </button>
+
+              <span className="control-time">{formatTime(currentTime)}</span>
+
+              <div className="scrubber-wrap" ref={scrubberWrapRef}>
+                {hasLoopRange && duration > 0 && (
+                  <div
+                    className="loop-range-highlight"
+                    style={{
+                      left: `${(loopStart / duration) * 100}%`,
+                      width: `${((loopEnd - loopStart) / duration) * 100}%`,
+                    }}
+                  />
+                )}
+                {loopStart !== null && duration > 0 && (
+                  <div
+                    className="loop-marker loop-marker-start"
+                    style={{ left: `${(loopStart / duration) * 100}%` }}
+                    title={`Loop start: ${formatTime(loopStart)} — drag to adjust`}
+                    onPointerDown={(e) => {
+                      e.preventDefault();
+                      setDraggingMarker("start");
+                    }}
+                  />
+                )}
+                {loopEnd !== null && duration > 0 && (
+                  <div
+                    className="loop-marker loop-marker-end"
+                    style={{ left: `${(loopEnd / duration) * 100}%` }}
+                    title={`Loop end: ${formatTime(loopEnd)} — drag to adjust`}
+                    onPointerDown={(e) => {
+                      e.preventDefault();
+                      setDraggingMarker("end");
+                    }}
+                  />
+                )}
+                <input
+                  type="range"
+                  className="control-scrubber"
+                  min={0}
+                  max={duration || 0}
+                  step={0.01}
+                  value={currentTime}
+                  onChange={handleSeek}
+                />
+              </div>
+
+              <span className="control-time">{formatTime(duration)}</span>
+
+              <button
+                type="button"
+                className="control-btn"
+                onClick={toggleMute}
+                aria-label={muted ? "Unmute" : "Mute"}
+              >
+                {muted ? <MuteIcon /> : <VolumeIcon />}
+              </button>
+
+              <button
+                type="button"
+                className="control-btn"
+                onClick={toggleFullscreen}
+                aria-label={
+                  isFullscreen ? "Exit fullscreen" : "Enter fullscreen"
+                }
+              >
+                {isFullscreen ? <FullscreenExitIcon /> : <FullscreenIcon />}
+              </button>
+            </div>
+
+            <div className="loop-section-controls">
+              <button
+                type="button"
+                className="loop-mark-btn"
+                onClick={markLoopStart}
+              >
+                Set start
+              </button>
+              <button
+                type="button"
+                className="loop-mark-btn"
+                onClick={markLoopEnd}
+              >
+                Set end
+              </button>
+
+              {hasLoopRange && (
+                <>
+                  <span className="loop-range-label">
+                    {formatTime(loopStart)}–{formatTime(loopEnd)}
+                  </span>
+                  <button
+                    type="button"
+                    className={`toggle-pill ${
+                      sectionLooping ? "toggle-pill-active" : ""
+                    }`}
+                    role="switch"
+                    aria-checked={sectionLooping}
+                    onClick={() => setSectionLooping((s) => !s)}
+                  >
+                    Loop section
+                  </button>
+                  <button
+                    type="button"
+                    className="loop-clear-btn"
+                    onClick={clearLoopSection}
+                    aria-label="Clear loop section"
+                  >
+                    Clear
+                  </button>
+                </>
+              )}
+            </div>
+          </>
+        )}
       </div>
+
+      <canvas ref={canvasRef} style={{ display: "none" }} />
 
       <div className="viewer-controls">
         <label className="viewer-speed">
@@ -859,6 +1026,22 @@ function DanceViewerInline({ video }) {
           }
         >
           Loop video
+        </button>
+
+        <button
+          type="button"
+          className={`toggle-pill ${slideshowOn ? "toggle-pill-active" : ""}`}
+          role="switch"
+          aria-checked={slideshowOn}
+          onClick={handleToggleSlideshow}
+          disabled={beatTimestamps.length === 0}
+          title={
+            beatTimestamps.length === 0
+              ? "No counts detected for this video"
+              : undefined
+          }
+        >
+          Frame View
         </button>
       </div>
     </div>
@@ -933,6 +1116,38 @@ function FullscreenIcon() {
       <polyline points="9 21 3 21 3 15" />
       <line x1="21" y1="3" x2="14" y2="10" />
       <line x1="3" y1="21" x2="10" y2="14" />
+    </svg>
+  );
+}
+
+function ChevronLeftIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <polyline points="15 18 9 12 15 6" />
+    </svg>
+  );
+}
+
+function ChevronRightIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <polyline points="9 18 15 12 9 6" />
     </svg>
   );
 }
