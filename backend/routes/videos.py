@@ -4,6 +4,7 @@ from apis.upload_video import upload_video
 from apis.video_status import get_video_status
 from apis.get_video import get_video
 from apis.list_videos import list_videos
+from apis.delete_video import delete_video
 from routes.auth import get_payload_or_error
 
 videos_bp = Blueprint('videos', __name__)
@@ -49,6 +50,19 @@ def get_video_route(video_id):
         return jsonify({"error": error}), status_code
 
     return jsonify(result), status_code
+
+
+@videos_bp.route('/api/videos/<video_id>', methods=['DELETE'])
+def delete_video_route(video_id):
+    payload, error = get_payload_or_error()
+    if error:
+        return jsonify({"error": error}), 401
+
+    error, status_code = delete_video(video_id, payload["sub"])
+    if error:
+        return jsonify({"error": error}), status_code
+
+    return jsonify({"status": "deleted"}), status_code
 
 
 @videos_bp.route('/api/videos', methods=['GET'])
