@@ -83,3 +83,7 @@ export function listVideos() {
 export function getVideo(videoId) {
   return request(`/api/videos/${videoId}`, { method: "GET" });
 }
+
+export function deleteVideo(videoId) {
+  return request(`/api/videos/${videoId}`, { method: "DELETE" });
+}
