@@ -38,6 +38,7 @@ The backend is written in Python/Flask. Here are the APIs used in the backend:
 | `/api/videos/status/<video_id>` | GET | Returns the current processing status (`processing`, `done`, or `failed`) from Redis. Used to poll if the video is done processing. |
 | `/api/videos/<video_id>` | GET | Returns a presigned S3 URL for the processed video when a user clicks on a video in the library list view. |
 | `/api/videos` | GET | Returns all videos belonging to the current user for the library list view. |
+| `/api/videos/<video_id>` | PATCH | Allows user to give the video a custom name. |
 | `/api/videos/<video_id>` | DELETE | Deletes a video's S3 objects and DynamoDB record. |
 
 ### Video Processing Flow
