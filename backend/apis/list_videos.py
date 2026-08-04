@@ -16,7 +16,7 @@ def list_videos(user_id):
         {
             "video_id": item["video_id"],
             "status": item["status"],
-            "filename": item.get("filename", "Untitled"),
+            "name": item.get("name") or item.get("filename", "Untitled"),
             "created_at": item["created_at"],
         }
         for item in result.get("Items", [])

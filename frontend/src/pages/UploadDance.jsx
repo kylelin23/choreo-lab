@@ -8,6 +8,7 @@ import {
   listVideos,
   getVideo,
   deleteVideo,
+  renameVideo,
 } from "../lib/api";
 
 function UploadDance({ email, onLogout }) {
@@ -19,6 +20,9 @@ function UploadDance({ email, onLogout }) {
   const [selectedVideoId, setSelectedVideoId] = useState(null);
   const [loadingVideo, setLoadingVideo] = useState(false);
   const [deletingId, setDeletingId] = useState(null);
+  const [renamingId, setRenamingId] = useState(null);
+  const [renameInput, setRenameInput] = useState("");
+  const [savingRename, setSavingRename] = useState(false);
   const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [avatarMenuOpen, setAvatarMenuOpen] = useState(false);
@@ -160,6 +164,36 @@ function UploadDance({ email, onLogout }) {
     }
   }
 
+  function startRename(video) {
+    setRenamingId(video.video_id);
+    setRenameInput(video.name || "");
+  }
+
+  function cancelRename() {
+    setRenamingId(null);
+    setRenameInput("");
+  }
+
+  async function submitRename(videoId) {
+    const trimmed = renameInput.trim();
+    if (!trimmed) {
+      cancelRename();
+      return;
+    }
+
+    setError("");
+    setSavingRename(true);
+    try {
+      await renameVideo(videoId, trimmed);
+      await refreshVideos();
+      cancelRename();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSavingRename(false);
+    }
+  }
+
   function formatElapsed(seconds) {
     const m = Math.floor(seconds / 60);
     const s = seconds % 60;
@@ -268,37 +302,93 @@ function UploadDance({ email, onLogout }) {
             <ul>
               {videos.map((v) => (
                 <li key={v.video_id} className="rail-item-row">
-                  <button
-                    className={`rail-item ${
-                      v.video_id === selectedVideoId ? "rail-item-active" : ""
-                    }`}
-                    onClick={() =>
-                      v.status === "done" && handleViewVideo(v.video_id)
-                    }
-                    disabled={v.status !== "done"}
-                  >
-                    <span className="rail-item-date">
-                      {v.filename} ·{" "}
-                      {new Date(v.created_at).toLocaleDateString()}
-                    </span>
-                    <span className={`status-badge status-badge-${v.status}`}>
-                      <span className={`status-dot status-dot-${v.status}`} />
-                      {v.status === "processing" ? "processing…" : v.status}
-                    </span>
-                  </button>
-                  <button
-                    className="rail-delete-btn"
-                    onClick={() => handleDeleteVideo(v.video_id)}
-                    disabled={deletingId === v.video_id}
-                    aria-label={`Delete ${v.filename || "this dance"}`}
-                    title="Delete"
-                  >
-                    {deletingId === v.video_id ? (
-                      <span className="spinner" aria-hidden="true" />
-                    ) : (
-                      <TrashIcon />
-                    )}
-                  </button>
+                  {renamingId === v.video_id ? (
+                    <div className="rail-rename-form">
+                      <input
+                        type="text"
+                        className="rail-rename-input"
+                        value={renameInput}
+                        onChange={(e) => setRenameInput(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") submitRename(v.video_id);
+                          if (e.key === "Escape") cancelRename();
+                        }}
+                        maxLength={100}
+                        autoFocus
+                        disabled={savingRename}
+                      />
+                      <button
+                        type="button"
+                        className="rail-rename-btn"
+                        onClick={() => submitRename(v.video_id)}
+                        disabled={savingRename}
+                        aria-label="Save name"
+                      >
+                        {savingRename ? (
+                          <span className="spinner" aria-hidden="true" />
+                        ) : (
+                          <CheckIcon />
+                        )}
+                      </button>
+                      <button
+                        type="button"
+                        className="rail-rename-btn"
+                        onClick={cancelRename}
+                        disabled={savingRename}
+                        aria-label="Cancel rename"
+                      >
+                        <XIcon />
+                      </button>
+                    </div>
+                  ) : (
+                    <>
+                      <button
+                        className={`rail-item ${
+                          v.video_id === selectedVideoId
+                            ? "rail-item-active"
+                            : ""
+                        }`}
+                        onClick={() =>
+                          v.status === "done" && handleViewVideo(v.video_id)
+                        }
+                        disabled={v.status !== "done"}
+                      >
+                        <span className="rail-item-date">
+                          {v.name} ·{" "}
+                          {new Date(v.created_at).toLocaleDateString()}
+                        </span>
+                        <span
+                          className={`status-badge status-badge-${v.status}`}
+                        >
+                          <span
+                            className={`status-dot status-dot-${v.status}`}
+                          />
+                          {v.status === "processing" ? "processing…" : v.status}
+                        </span>
+                      </button>
+                      <button
+                        className="rail-delete-btn"
+                        onClick={() => startRename(v)}
+                        aria-label={`Rename ${v.name || "this dance"}`}
+                        title="Rename"
+                      >
+                        <PencilIcon />
+                      </button>
+                      <button
+                        className="rail-delete-btn"
+                        onClick={() => handleDeleteVideo(v.video_id)}
+                        disabled={deletingId === v.video_id}
+                        aria-label={`Delete ${v.name || "this dance"}`}
+                        title="Delete"
+                      >
+                        {deletingId === v.video_id ? (
+                          <span className="spinner" aria-hidden="true" />
+                        ) : (
+                          <TrashIcon />
+                        )}
+                      </button>
+                    </>
+                  )}
                 </li>
               ))}
             </ul>
@@ -469,6 +559,55 @@ function TrashIcon() {
       <path d="M10 11v6" />
       <path d="M14 11v6" />
       <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
+    </svg>
+  );
+}
+
+function PencilIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
+    </svg>
+  );
+}
+
+function CheckIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <polyline points="20 6 9 17 4 12" />
+    </svg>
+  );
+}
+
+function XIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <line x1="18" y1="6" x2="6" y2="18" />
+      <line x1="6" y1="6" x2="18" y2="18" />
     </svg>
   );
 }

@@ -5,6 +5,7 @@ from apis.video_status import get_video_status
 from apis.get_video import get_video
 from apis.list_videos import list_videos
 from apis.delete_video import delete_video
+from apis.rename_video import rename_video
 from routes.auth import get_payload_or_error
 
 videos_bp = Blueprint('videos', __name__)
@@ -73,3 +74,16 @@ def list_videos_route():
 
     videos = list_videos(payload["sub"])
     return jsonify({"videos": videos})
+
+@videos_bp.route('/api/videos/<video_id>', methods=['PATCH'])
+def rename_video_route(video_id):
+    payload, error = get_payload_or_error()
+    if error:
+        return jsonify({"error": error}), 401
+
+    data = request.json or {}
+    error, status_code = rename_video(video_id, payload["sub"], data.get("name"))
+    if error:
+        return jsonify({"error": error}), status_code
+
+    return jsonify({"status": "renamed"}), status_code

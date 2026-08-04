@@ -87,3 +87,10 @@ export function getVideo(videoId) {
 export function deleteVideo(videoId) {
   return request(`/api/videos/${videoId}`, { method: "DELETE" });
 }
+
+export function renameVideo(videoId, name) {
+  return request(`/api/videos/${videoId}`, {
+    method: "PATCH",
+    body: JSON.stringify({ name }),
+  });
+}

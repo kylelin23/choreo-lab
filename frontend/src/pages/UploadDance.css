@@ -390,16 +390,71 @@ body {
     box-shadow 0.15s ease;
 }
 
+.rail-rename-form {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  flex: 1;
+}
+
+.rail-rename-input {
+  flex: 1;
+  min-width: 0;
+  padding: 0.6rem 0.7rem;
+  border: 1px solid #4f46e5;
+  border-radius: 10px;
+  font-family: inherit;
+  font-size: 0.82rem;
+  color: #18181b;
+  background: #fff;
+}
+
+.rail-rename-input:focus {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.12);
+}
+
+.rail-rename-btn {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 100%;
+  border: 1px solid #e4e4e7;
+  border-radius: 10px;
+  background: #fff;
+  color: #4f46e5;
+  cursor: pointer;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease;
+}
+
+.rail-rename-btn svg {
+  width: 16px;
+  height: 16px;
+}
+
+.rail-rename-btn:hover:not(:disabled) {
+  background: #eef2ff;
+  border-color: #c7d2fe;
+}
+
+.rail-rename-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
 .rail-delete-btn {
   flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: center;
   width: 32px;
-  border: 1px solid #f0f0f2;
+  border: 1px solid #e4e4e7;
   border-radius: 10px;
   background: #fff;
-  color: #b0b0b8;
+  color: #6b6b74;
   cursor: pointer;
   transition:
     background 0.15s ease,
@@ -408,8 +463,8 @@ body {
 }
 
 .rail-delete-btn svg {
-  width: 14px;
-  height: 14px;
+  width: 16px;
+  height: 16px;
 }
 
 .rail-delete-btn:hover:not(:disabled) {
