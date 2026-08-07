@@ -47,7 +47,11 @@ from typing import Any
 import numpy as np
 
 # --- audio / detection knobs ----------------------------------------------- #
-AUDIO_SR = 22050
+# 11025 Hz is plenty for beat + downbeat detection (the kick band tops out at
+# 130 Hz, far below the 5.5 kHz Nyquist) and roughly halves the audio array and
+# all spectral work vs 22050. Timing resolution drops to ~one 512-sample hop
+# (~46 ms); raise back to 22050 if you need tighter beat timestamps.
+AUDIO_SR = 11025
 HOP_LENGTH = 512
 LOW_BAND_HZ = (30.0, 130.0)
 ENVELOPE_WINDOW = 1
@@ -195,14 +199,34 @@ def _sample_peak(envelope: np.ndarray, frames: np.ndarray) -> np.ndarray:
 
 
 def _low_band_energy(audio: np.ndarray, sr: int) -> tuple[np.ndarray, float]:
-    import librosa
+    """Per-hop kick-band energy + the band's share of total energy.
 
-    spec = np.abs(librosa.stft(audio, hop_length=HOP_LENGTH))
-    freqs = librosa.fft_frequencies(sr=sr)
-    band = (freqs >= LOW_BAND_HZ[0]) & (freqs <= LOW_BAND_HZ[1])
-    total = float(spec.sum())
-    share = float(spec[band].sum() / total) if total > 0 else 0.0
-    return spec[band].sum(axis=0), share
+    A band-pass filter instead of a second full STFT: onset detection already
+    pays for one STFT, and allocating another complex spectrogram just to read
+    30-130 Hz is wasteful. sosfiltfilt is linear-time and allocates a single
+    array the size of the audio, not a freq-by-frame matrix — the main
+    memory/CPU saving on this path.
+    """
+    from scipy.signal import butter, sosfiltfilt
+
+    nyq = 0.5 * sr
+    # Guard tiny clips: sosfiltfilt needs a few times the filter length.
+    if audio.size < 64:
+        return np.zeros(1 + audio.size // HOP_LENGTH), 0.0
+
+    sos = butter(4, [LOW_BAND_HZ[0] / nyq, min(LOW_BAND_HZ[1], 0.99 * nyq) / nyq],
+                 btype="band", output="sos")
+    low = sosfiltfilt(sos, audio).astype(np.float32)
+
+    n_frames = 1 + audio.size // HOP_LENGTH
+    per_frame = np.zeros(n_frames, dtype=np.float32)  # energy on librosa's hop grid
+    for i in range(n_frames):
+        seg = low[i * HOP_LENGTH:(i + 1) * HOP_LENGTH]
+        if seg.size:
+            per_frame[i] = float(np.dot(seg, seg))
+
+    total = float(np.dot(audio, audio)) or 1.0
+    return per_frame, float(per_frame.sum() / total)
 
 
 def _normalise(values: np.ndarray) -> np.ndarray:
