@@ -742,6 +742,44 @@ body {
   user-select: none;
 }
 
+.play-feedback {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 4.2rem;
+  height: 4.2rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  pointer-events: none;
+  user-select: none;
+  z-index: 5;
+  animation: play-feedback-pop 0.55s ease-out forwards;
+}
+
+.play-feedback svg {
+  width: 1.9rem;
+  height: 1.9rem;
+}
+
+@keyframes play-feedback-pop {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.6);
+  }
+  25% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(1.2);
+  }
+}
+
 .viewer video {
   display: block;
   background: #000;

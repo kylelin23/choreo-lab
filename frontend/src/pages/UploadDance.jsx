@@ -656,6 +656,10 @@ function DanceViewerInline({ video }) {
   const [loopStart, setLoopStart] = useState(null);
   const [loopEnd, setLoopEnd] = useState(null);
   const [sectionLooping, setSectionLooping] = useState(false);
+  // Brief center-screen play/pause icon flash, shown whenever playback is
+  // toggled (click, spacebar, etc.) so the screen visibly reacts.
+  const [playbackFeedback, setPlaybackFeedback] = useState(null);
+  const playbackFeedbackTimeoutRef = useRef(null);
   // Whether the "set a loop section" controls (Set start / Set end / Clear)
   // are visible. Kept collapsed behind the single bottom "Loop" pill until
   // the user opts in, instead of showing two loop-related controls at once.
@@ -678,6 +682,19 @@ function DanceViewerInline({ video }) {
       videoRef.current.playbackRate = speed;
     }
   }, [speed]);
+
+  // Clear any pending feedback-flash timeout on unmount.
+  useEffect(() => {
+    return () => clearTimeout(playbackFeedbackTimeoutRef.current);
+  }, []);
+
+  function flashPlaybackFeedback(icon) {
+    setPlaybackFeedback({ icon, key: Date.now() });
+    clearTimeout(playbackFeedbackTimeoutRef.current);
+    playbackFeedbackTimeoutRef.current = setTimeout(() => {
+      setPlaybackFeedback(null);
+    }, 550);
+  }
 
   function captureAndCacheFrame(idx) {
     const v = videoRef.current;
@@ -853,9 +870,11 @@ function DanceViewerInline({ video }) {
     if (videoRef.current.paused) {
       videoRef.current.play();
       setPlaying(true);
+      flashPlaybackFeedback("play");
     } else {
       videoRef.current.pause();
       setPlaying(false);
+      flashPlaybackFeedback("pause");
     }
   }
 
@@ -1012,6 +1031,16 @@ function DanceViewerInline({ video }) {
           {!slideshowOn && showCounts && count !== null && (
             <span className="count-overlay" aria-hidden="true">
               {count}
+            </span>
+          )}
+
+          {!slideshowOn && playbackFeedback && (
+            <span
+              key={playbackFeedback.key}
+              className="play-feedback"
+              aria-hidden="true"
+            >
+              {playbackFeedback.icon === "play" ? <PlayIcon /> : <PauseIcon />}
             </span>
           )}
 
