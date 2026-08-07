@@ -656,6 +656,10 @@ function DanceViewerInline({ video }) {
   const [loopStart, setLoopStart] = useState(null);
   const [loopEnd, setLoopEnd] = useState(null);
   const [sectionLooping, setSectionLooping] = useState(false);
+  // Whether the "set a loop section" controls (Set start / Set end / Clear)
+  // are visible. Kept collapsed behind the single bottom "Loop" pill until
+  // the user opts in, instead of showing two loop-related controls at once.
+  const [loopPanelOpen, setLoopPanelOpen] = useState(false);
   const [draggingMarker, setDraggingMarker] = useState(null);
   const beatTimestamps = video.beat_timestamps || [];
   const beatCounts = video.counts || [];
@@ -766,6 +770,21 @@ function DanceViewerInline({ video }) {
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [slideshowOn, beatTimestamps.length]);
+
+  // Spacebar play/pause — ignored while the slideshow is active or while
+  // the user is typing into a form control anywhere on the page.
+  useEffect(() => {
+    if (slideshowOn) return;
+    function handleKeyDown(e) {
+      if (e.code !== "Space" && e.key !== " ") return;
+      const tag = document.activeElement?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+      e.preventDefault();
+      togglePlay();
+    }
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [slideshowOn]);
 
   useEffect(() => {
     let frameId;
@@ -917,6 +936,30 @@ function DanceViewerInline({ video }) {
     setLoopStart(null);
     setLoopEnd(null);
     setSectionLooping(false);
+  }
+
+  // The single bottom "Loop" pill: first click opens the loop-section
+  // panel (Set start / Set end / Clear) and starts looping — the whole
+  // video if no section is marked yet, or the marked section if one
+  // already exists. A second click closes the panel, stops looping, and
+  // clears any marked start/end so the markers disappear from the scrubber.
+  function toggleLoopPanel() {
+    setLoopPanelOpen((open) => {
+      const next = !open;
+      if (next) {
+        if (loopStart !== null && loopEnd !== null) {
+          setSectionLooping(true);
+        } else {
+          setLooping(true);
+        }
+      } else {
+        setLooping(false);
+        setSectionLooping(false);
+        setLoopStart(null);
+        setLoopEnd(null);
+      }
+      return next;
+    });
   }
 
   function formatTime(seconds) {
@@ -1101,49 +1144,40 @@ function DanceViewerInline({ video }) {
               </button>
             </div>
 
-            <div className="loop-section-controls">
-              <button
-                type="button"
-                className="loop-mark-btn"
-                onClick={markLoopStart}
-              >
-                Set start
-              </button>
-              <button
-                type="button"
-                className="loop-mark-btn"
-                onClick={markLoopEnd}
-              >
-                Set end
-              </button>
+            {loopPanelOpen && (
+              <div className="loop-section-controls">
+                <button
+                  type="button"
+                  className="loop-mark-btn"
+                  onClick={markLoopStart}
+                >
+                  Set start
+                </button>
+                <button
+                  type="button"
+                  className="loop-mark-btn"
+                  onClick={markLoopEnd}
+                >
+                  Set end
+                </button>
 
-              {hasLoopRange && (
-                <>
-                  <span className="loop-range-label">
-                    {formatTime(loopStart)}–{formatTime(loopEnd)}
-                  </span>
-                  <button
-                    type="button"
-                    className={`toggle-pill ${
-                      sectionLooping ? "toggle-pill-active" : ""
-                    }`}
-                    role="switch"
-                    aria-checked={sectionLooping}
-                    onClick={() => setSectionLooping((s) => !s)}
-                  >
-                    Loop section
-                  </button>
-                  <button
-                    type="button"
-                    className="loop-clear-btn"
-                    onClick={clearLoopSection}
-                    aria-label="Clear loop section"
-                  >
-                    Clear
-                  </button>
-                </>
-              )}
-            </div>
+                {hasLoopRange && (
+                  <>
+                    <span className="loop-range-label">
+                      {formatTime(loopStart)}–{formatTime(loopEnd)}
+                    </span>
+                    <button
+                      type="button"
+                      className="loop-clear-btn"
+                      onClick={clearLoopSection}
+                      aria-label="Clear loop section"
+                    >
+                      Clear
+                    </button>
+                  </>
+                )}
+              </div>
+            )}
           </>
         )}
       </div>
@@ -1203,22 +1237,12 @@ function DanceViewerInline({ video }) {
 
         <button
           type="button"
-          className={`toggle-pill ${
-            looping && !(sectionLooping && hasLoopRange)
-              ? "toggle-pill-active"
-              : ""
-          }`}
+          className={`toggle-pill ${loopPanelOpen ? "toggle-pill-active" : ""}`}
           role="switch"
-          aria-checked={looping}
-          onClick={() => setLooping((l) => !l)}
-          disabled={sectionLooping && hasLoopRange}
-          title={
-            sectionLooping && hasLoopRange
-              ? "Clear the loop section to use whole-video loop"
-              : undefined
-          }
+          aria-checked={loopPanelOpen}
+          onClick={toggleLoopPanel}
         >
-          Loop video
+          Loop
         </button>
 
         <button

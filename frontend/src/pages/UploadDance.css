@@ -903,19 +903,25 @@ body {
 
 .loop-clear-btn {
   margin-left: auto;
-  padding: 0.35rem 0.6rem;
-  border: none;
-  background: none;
+  padding: 0.35rem 0.7rem;
+  border: 1px solid #f3c9c6;
+  border-radius: 8px;
+  background: #fdf0ef;
   font-family: inherit;
-  font-size: 0.75rem;
-  font-weight: 600;
-  color: #b0b0b8;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #b3261e;
   cursor: pointer;
-  transition: color 0.15s ease;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease;
 }
 
 .loop-clear-btn:hover {
-  color: #b3261e;
+  background: #fbe2e0;
+  border-color: #e8a19d;
+  color: #8f1c17;
 }
 
 /* ---- Beat slideshow (in place of the video) ---- */
