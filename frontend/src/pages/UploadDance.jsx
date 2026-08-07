@@ -764,6 +764,12 @@ function DanceViewerInline({ video }) {
           ),
         );
         setSlideshowIndex(startIdx);
+      } else if (videoRef.current) {
+        // Coming back from Frame View — restart from the top of the
+        // marked loop section if one exists, otherwise from the start.
+        const resumeAt = loopStart !== null ? loopStart : 0;
+        videoRef.current.currentTime = resumeAt;
+        setCurrentTime(resumeAt);
       }
       return next;
     });
@@ -810,7 +816,11 @@ function DanceViewerInline({ video }) {
         const t = videoRef.current.currentTime;
         setCurrentTime(t);
 
+        // Skip the loop-restart check while Frame View is capturing
+        // frames — otherwise its deliberate seeks race against this and
+        // get yanked back to loopStart mid-capture, repeating frames.
         if (
+          !slideshowOn &&
           sectionLooping &&
           loopStart !== null &&
           loopEnd !== null &&
@@ -823,7 +833,7 @@ function DanceViewerInline({ video }) {
     }
     frameId = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(frameId);
-  }, [sectionLooping, loopStart, loopEnd]);
+  }, [sectionLooping, loopStart, loopEnd, slideshowOn]);
 
   useEffect(() => {
     if (!draggingMarker) return;
