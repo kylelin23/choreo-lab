@@ -9,3 +9,5 @@ librosa
 numpy
 anthropic
 flask-limiter
+gunicorn
+opencv-python
