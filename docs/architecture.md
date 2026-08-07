@@ -30,7 +30,7 @@ Authentication is handled by Flask, backed by a Users table in DynamoDB. It uses
 API endpoints are protected and check for a valid JWT token.
 
 ### APIs
-The backend is written in Python/Flask. Here are the APIs used in the backend:
+The backend is written in Python/Flask, and are rate limited to prevent malicious cyber attacks. Here are the APIs used in the backend:
 
 | Endpoint | Method | Description |
 |---|---|---|
