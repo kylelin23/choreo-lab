@@ -7,11 +7,13 @@ from apis.list_videos import list_videos
 from apis.delete_video import delete_video
 from apis.rename_video import rename_video
 from routes.auth import get_payload_or_error
+from extensions import limiter
 
 videos_bp = Blueprint('videos', __name__)
 
 
 @videos_bp.route('/api/videos/upload', methods=['POST'])
+@limiter.limit("10 per hour")
 def upload_route():
     payload, error = get_payload_or_error()
     if error:
@@ -28,6 +30,7 @@ def upload_route():
 
 
 @videos_bp.route('/api/videos/status/<video_id>', methods=['GET'])
+@limiter.limit("60 per minute")
 def status_route(video_id):
     payload, error = get_payload_or_error()
     if error:
@@ -41,6 +44,7 @@ def status_route(video_id):
 
 
 @videos_bp.route('/api/videos/<video_id>', methods=['GET'])
+@limiter.limit("30 per minute")
 def get_video_route(video_id):
     payload, error = get_payload_or_error()
     if error:
@@ -54,6 +58,7 @@ def get_video_route(video_id):
 
 
 @videos_bp.route('/api/videos/<video_id>', methods=['DELETE'])
+@limiter.limit("20 per hour")
 def delete_video_route(video_id):
     payload, error = get_payload_or_error()
     if error:
@@ -67,6 +72,7 @@ def delete_video_route(video_id):
 
 
 @videos_bp.route('/api/videos', methods=['GET'])
+@limiter.limit("30 per minute")
 def list_videos_route():
     payload, error = get_payload_or_error()
     if error:
@@ -75,14 +81,17 @@ def list_videos_route():
     videos = list_videos(payload["sub"])
     return jsonify({"videos": videos})
 
+
 @videos_bp.route('/api/videos/<video_id>', methods=['PATCH'])
+@limiter.limit("20 per hour")
 def rename_video_route(video_id):
     payload, error = get_payload_or_error()
     if error:
         return jsonify({"error": error}), 401
 
     data = request.json or {}
-    error, status_code = rename_video(video_id, payload["sub"], data.get("name"))
+    error, status_code = rename_video(
+        video_id, payload["sub"], data.get("name"))
     if error:
         return jsonify({"error": error}), status_code
 

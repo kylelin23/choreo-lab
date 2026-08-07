@@ -5,6 +5,7 @@ from apis.login import login
 from apis.me import me
 from apis.logout import logout
 from jwt_utils import decode_token
+from extensions import limiter
 
 auth_bp = Blueprint('auth', __name__)
 
@@ -24,6 +25,7 @@ def get_payload_or_error():
 
 
 @auth_bp.route('/api/auth/register', methods=['POST'])
+@limiter.limit("5 per hour")
 def register_route():
     data = request.json
     token, user, error = register(data["email"], data["password"])
@@ -33,6 +35,7 @@ def register_route():
 
 
 @auth_bp.route('/api/auth/login', methods=['POST'])
+@limiter.limit("10 per hour")
 def login_route():
     data = request.json
     token, user, error = login(data["email"], data["password"])
