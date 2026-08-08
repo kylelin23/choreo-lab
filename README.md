@@ -15,6 +15,8 @@ Production Deployment: http://18.237.24.57:5173/
 - Backend: Flask/Python
 - Database: Amazon DynamoDB
 - Object Storage: Amazon S3
+- Message Queue: Amazon SQS
+- Background Workers: AWS Lambda
 - State Caching: Redis
 - Containerization: Docker
 - Deployment: AWS EC2
