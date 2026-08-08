@@ -62,6 +62,12 @@ BASS_PRESENCE_MIN = 0.03
 # count-1-vs-5 judgement pays off most.
 COUNTS_PER_CYCLE = 8
 
+# Music beats per count. 1 = a count on every beat (full-time). 2 = a count on
+# every other beat (half-time), which is how K-pop / hip-hop is usually counted;
+# use it when the counts feel about twice too fast. Override per request via
+# detect_beats_and_sync(..., beats_per_count=2).
+BEATS_PER_COUNT = int(os.environ.get("BEAT_SYNC_BEATS_PER_COUNT", "1"))
+
 # --- Brain (LLM) knobs ------------------------------------------------------ #
 # Claude is on by default; set BEAT_SYNC_USE_LLM=0 to force the offline heuristic
 # (useful for fast, free, deterministic API tests).
@@ -128,17 +134,22 @@ class BeatFacts:
 # --------------------------------------------------------------------------- #
 # Public entry point
 # --------------------------------------------------------------------------- #
-def detect_beats_and_sync(input_path: str, output_path: str) -> dict:
+def detect_beats_and_sync(input_path: str, output_path: str,
+                          *, beats_per_count: int | None = None) -> dict:
     audio, sr = _load_audio(input_path)
     facts = _detect_beats(audio, sr)
 
-    beat_times = [b.time_sec for b in facts.beats]
+    stride = beats_per_count or BEATS_PER_COUNT  # 1 = full-time, 2 = half-time
+    beat_times: list[float] = []
     counts: list[int] = []
     if facts.beats:
         phase, detector = _resolve_downbeat(facts)
-        counts = [((b.index - phase) % COUNTS_PER_CYCLE) + 1 for b in facts.beats]
-        print(f"[beat_sync] downbeat via {detector}, phase {phase}, "
-              f"{len(facts.beats)} beats @ {facts.bpm:.1f} bpm")
+        # A count lands every `stride` beats, aligned so "1" sits on the downbeat.
+        positions = list(range(phase % stride, len(facts.beats), stride))
+        beat_times = [facts.beats[p].time_sec for p in positions]
+        counts = [(((p - phase) // stride) % COUNTS_PER_CYCLE) + 1 for p in positions]
+        print(f"[beat_sync] downbeat via {detector}, phase {phase}, stride {stride}, "
+              f"{len(positions)} counts @ {facts.bpm:.1f} bpm")
 
     _write_output(input_path, output_path)
 
