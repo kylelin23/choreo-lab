@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import "../index.css";
-import "./UploadDance.css";
+import "./UploadDance.css"; // see the .viewer-video-frame:fullscreen rule — needed for the fullscreen fix below
 import {
   logout as apiLogout,
   uploadVideo,
@@ -675,6 +675,12 @@ function DanceViewerInline({ video }) {
   const frameCacheRef = useRef({}); // beat index -> captured data URL
 
   const videoRef = useRef(null);
+  // Wraps the <video> plus its overlays (count badge, play/pause flash,
+  // slideshow layer). We fullscreen THIS element rather than the <video>
+  // itself — fullscreening the bare video would strip out everything
+  // absolutely positioned around it, which is why counts used to vanish
+  // in fullscreen.
+  const videoFrameRef = useRef(null);
   const scrubberWrapRef = useRef(null);
 
   useEffect(() => {
@@ -868,7 +874,7 @@ function DanceViewerInline({ video }) {
 
   useEffect(() => {
     function handleFullscreenChange() {
-      setIsFullscreen(document.fullscreenElement === videoRef.current);
+      setIsFullscreen(document.fullscreenElement === videoFrameRef.current);
     }
     document.addEventListener("fullscreenchange", handleFullscreenChange);
     return () =>
@@ -903,11 +909,14 @@ function DanceViewerInline({ video }) {
   }
 
   function toggleFullscreen() {
-    if (!videoRef.current) return;
+    // Fullscreen the wrapping frame (video + overlays), not just the
+    // <video> element, so the count badge / play-pause flash / slideshow
+    // overlay stay visible in fullscreen instead of disappearing.
+    if (!videoFrameRef.current) return;
     if (document.fullscreenElement) {
       document.exitFullscreen?.();
     } else {
-      videoRef.current.requestFullscreen?.();
+      videoFrameRef.current.requestFullscreen?.();
     }
   }
 
@@ -1017,7 +1026,12 @@ function DanceViewerInline({ video }) {
 
   return (
     <div className="viewer">
-      <div className="viewer-video-wrap">
+      {/* videoFrameRef now wraps the video+overlays AND the controls bar
+          below it, and this whole wrap is what gets fullscreened. If only
+          .viewer-video-frame were fullscreened, the controls (including the
+          exit-fullscreen button) live outside it as siblings and would
+          disappear along with it — same class of bug as the counts issue. */}
+      <div className="viewer-video-wrap" ref={videoFrameRef}>
         <div className="viewer-video-frame">
           <video
             ref={videoRef}
@@ -1029,7 +1043,13 @@ function DanceViewerInline({ video }) {
             onEnded={() => setPlaying(false)}
             style={{
               maxWidth: "100%",
-              maxHeight: "75vh",
+              // Capped at 75vh normally so the controls/scrubber below it
+              // always have room. In fullscreen there's no "below it" to
+              // make room for within the wrap's own height budget, so we
+              // let it grow — CSS still bounds it against the fullscreen
+              // wrap's height. Inline styles beat stylesheet rules, so
+              // this has to be reactive rather than left to CSS alone.
+              maxHeight: isFullscreen ? "calc(100vh - 64px)" : "75vh",
               width: "auto",
               height: "auto",
               transform: mirrored ? "scaleX(-1)" : "none",
