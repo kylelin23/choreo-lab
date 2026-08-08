@@ -216,7 +216,7 @@ function UploadDance({ email, onLogout }) {
           <ListIcon />
           {menuOpen ? "Close" : "Select a Dance"}
         </button>
-        <span className="topbar-brand">Choreo</span>
+        <span className="topbar-brand">Choreo Lab</span>
         <div className="topbar-avatar-wrap" ref={avatarMenuRef}>
           <button
             className="topbar-avatar"
