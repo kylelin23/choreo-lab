@@ -1,4 +1,4 @@
-## Choreo Video Library System Architecture
+## Choreo Lab System Architecture
 
 #### System Diagram
 <img src="diagrams/architecture_diagram.png" alt="Architecture diagram" width="900" />
