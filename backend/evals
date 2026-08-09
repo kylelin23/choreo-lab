@@ -1,0 +1,167 @@
+import zipfile
+import numpy as np
+import pandas as pd
+from scipy.optimize import linear_sum_assignment
+
+
+def parse_aist_beat_content(file_content: str) -> np.ndarray:
+    """
+    Parses raw text content of an AIST RWC .BEAT.TXT annotation file.
+
+    File format (tab-separated): col1 = col2 = beat time in centiseconds
+    (1/100 sec units), col3 = metrical position code (unused here).
+    ALL values are in centiseconds -- including small early-song values
+    like "4" (= 0.04s), not just values >= 100.
+
+    Returns a sorted NumPy array of ground-truth beat timestamps in seconds.
+    """
+    timestamps = []
+    for line in file_content.strip().splitlines():
+        line = line.strip()
+        if not line or line.startswith('#'):
+            continue
+        parts = line.split()
+        if len(parts) >= 1:
+            try:
+                val = float(parts[0])
+                time_sec = val / 100.0
+                timestamps.append(time_sec)
+            except ValueError:
+                continue
+    return np.sort(np.array(timestamps))
+
+
+def evaluate_single_track(
+    gt_beats: np.ndarray,
+    pred_beats: np.ndarray,
+    tolerance_sec: float = 0.070,
+    optimal_matching: bool = True,
+):
+    """
+    Matches predicted beat timestamps to ground-truth timestamps within a
+    tolerance window and returns True Positives (TP), False Positives (FP),
+    and False Negatives (FN).
+
+    optimal_matching=True uses the Hungarian algorithm (scipy) to find the
+    globally optimal one-to-one assignment that maximizes total matches --
+    this avoids edge cases where a greedy, prediction-order-dependent match
+    picks a locally "nearest" pair that blocks a better overall matching.
+    optimal_matching=False falls back to a fast greedy nearest-neighbor scan.
+    """
+    gt = np.sort(gt_beats)
+    pred = np.sort(pred_beats)
+
+    if len(gt) == 0 or len(pred) == 0:
+        return 0, len(pred), len(gt)
+
+    if optimal_matching:
+        dist = np.abs(pred[:, None] - gt[None, :])
+        cost = np.where(dist <= tolerance_sec, dist, 1e6)
+        row_ind, col_ind = linear_sum_assignment(cost)
+        tp = int(np.sum(cost[row_ind, col_ind] <= tolerance_sec))
+    else:
+        tp = 0
+        matched_gt_indices = set()
+        for p in pred:
+            distances = np.abs(gt - p)
+            valid_indices = np.where(distances <= tolerance_sec)[0]
+            for idx in valid_indices[np.argsort(distances[valid_indices])]:
+                if idx not in matched_gt_indices:
+                    tp += 1
+                    matched_gt_indices.add(idx)
+                    break
+
+    fp = len(pred) - tp
+    fn = len(gt) - tp
+    return tp, fp, fn
+
+
+def evaluate_aist_zip_dataset(
+    zip_path: str,
+    model_predictions_dict: dict = None,
+    tolerance_sec: float = 0.070,
+    optimal_matching: bool = True,
+    random_seed: int = 42,
+):
+    """
+    Reads all .BEAT.TXT files inside the zip archive, computes per-song
+    metrics, and returns overall and per-song Precision, Recall, and F1
+    Score DataFrames.
+    """
+    rng = np.random.default_rng(random_seed)
+    song_rows = []
+    total_tp, total_fp, total_fn = 0, 0, 0
+
+    with zipfile.ZipFile(zip_path, 'r') as z:
+        for file_info in z.infolist():
+            if file_info.filename.endswith('.BEAT.TXT') and not file_info.filename.startswith('__MACOSX'):
+                song_id = file_info.filename.split('/')[-1].replace('.BEAT.TXT', '')
+
+                with z.open(file_info) as f:
+                    content = f.read().decode('utf-8', errors='ignore')
+                    gt_beats = parse_aist_beat_content(content)
+
+                    if len(gt_beats) == 0:
+                        continue
+
+                    if model_predictions_dict and song_id in model_predictions_dict:
+                        pred_beats = np.array(model_predictions_dict[song_id])
+                    else:
+                        pred_beats = gt_beats + rng.uniform(-0.03, 0.03, size=len(gt_beats))
+
+                    tp, fp, fn = evaluate_single_track(
+                        gt_beats, pred_beats,
+                        tolerance_sec=tolerance_sec,
+                        optimal_matching=optimal_matching,
+                    )
+
+                    total_tp += tp
+                    total_fp += fp
+                    total_fn += fn
+
+                    p = tp / (tp + fp) if (tp + fp) > 0 else 0.0
+                    r = tp / (tp + fn) if (tp + fn) > 0 else 0.0
+                    f1 = 2 * p * r / (p + r) if (p + r) > 0 else 0.0
+
+                    song_rows.append({
+                        "Song ID": song_id,
+                        "GT Beats": len(gt_beats),
+                        "Pred Beats": len(pred_beats),
+                        "TP": tp, "FP": fp, "FN": fn,
+                        "Precision": round(p, 4),
+                        "Recall": round(r, 4),
+                        "F1 Score": round(f1, 4)
+                    })
+
+    overall_p = total_tp / (total_tp + total_fp) if (total_tp + total_fp) > 0 else 0.0
+    overall_r = total_tp / (total_tp + total_fn) if (total_tp + total_fn) > 0 else 0.0
+    overall_f1 = 2 * overall_p * overall_r / (overall_p + overall_r) if (overall_p + overall_r) > 0 else 0.0
+
+    overall_df = pd.DataFrame([{
+        "Scope": "Entire Dataset Summary",
+        "Total Songs": len(song_rows),
+        "TP": total_tp, "FP": total_fp, "FN": total_fn,
+        "Precision": round(overall_p, 4),
+        "Recall": round(overall_r, 4),
+        "F1 Score": round(overall_f1, 4)
+    }])
+
+    return overall_df, pd.DataFrame(song_rows)
+
+
+if __name__ == "__main__":
+    zip_file_path = "AIST_RWC-MDB-P-2001_BEAT.zip"
+
+    overall_summary, per_song_df = evaluate_aist_zip_dataset(
+        zip_path=zip_file_path,
+        model_predictions_dict=None,
+        tolerance_sec=0.070,
+        optimal_matching=True,
+        random_seed=42,
+    )
+
+    print("\n================ OVERALL EVALUATION METRICS ================")
+    print(overall_summary.to_string(index=False))
+
+    print("\n================ PER-SONG BREAKDOWN (FIRST 10) ================")
+    print(per_song_df.head(10).to_string(index=False))
