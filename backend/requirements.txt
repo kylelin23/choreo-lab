@@ -12,3 +12,5 @@ anthropic
 flask-limiter
 gunicorn
 opencv-python
+zipfile
+pandas
