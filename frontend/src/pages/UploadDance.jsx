@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import "../index.css";
-import "./UploadDance.css"; // see the .viewer-video-frame:fullscreen rule — needed for the fullscreen fix below
+import "./UploadDance.css";
 import {
   logout as apiLogout,
   uploadVideo,
@@ -116,8 +116,6 @@ function UploadDance({ email, onLogout }) {
           setUploading(false);
           await refreshVideos();
           if (status === "done") {
-            // Jump straight into the freshly processed video instead of
-            // leaving the user to find it in the menu themselves.
             handleViewVideo(videoId);
           }
         }
@@ -641,6 +639,10 @@ function getBeatIndex(t, timestamps) {
   return idx;
 }
 
+function maxPanForZoom(zoom) {
+  return zoom > 1 ? ((zoom - 1) / zoom) * 50 : 0;
+}
+
 function DanceViewerInline({ video }) {
   const [speed, setSpeed] = useState(1);
   const [customSpeedMode, setCustomSpeedMode] = useState(false);
@@ -656,13 +658,8 @@ function DanceViewerInline({ video }) {
   const [loopStart, setLoopStart] = useState(null);
   const [loopEnd, setLoopEnd] = useState(null);
   const [sectionLooping, setSectionLooping] = useState(false);
-  // Brief center-screen play/pause icon flash, shown whenever playback is
-  // toggled (click, spacebar, etc.) so the screen visibly reacts.
   const [playbackFeedback, setPlaybackFeedback] = useState(null);
   const playbackFeedbackTimeoutRef = useRef(null);
-  // Whether the "set a loop section" controls (Set start / Set end / Clear)
-  // are visible. Kept collapsed behind the single bottom "Loop" pill until
-  // the user opts in, instead of showing two loop-related controls at once.
   const [loopPanelOpen, setLoopPanelOpen] = useState(false);
   const [draggingMarker, setDraggingMarker] = useState(null);
   const beatTimestamps = video.beat_timestamps || [];
@@ -672,14 +669,16 @@ function DanceViewerInline({ video }) {
   const [slideshowFrame, setSlideshowFrame] = useState(null);
   const [slideshowLoading, setSlideshowLoading] = useState(false);
   const canvasRef = useRef(null);
-  const frameCacheRef = useRef({}); // beat index -> captured data URL
+  const frameCacheRef = useRef({});
+
+  const [cropMode, setCropMode] = useState(false);
+  const [cropZoom, setCropZoom] = useState(1);
+  const [cropPanX, setCropPanX] = useState(0);
+  const [cropPanY, setCropPanY] = useState(0);
+  const [draggingCrop, setDraggingCrop] = useState(false);
+  const cropDragStartRef = useRef(null);
 
   const videoRef = useRef(null);
-  // Wraps the <video> plus its overlays (count badge, play/pause flash,
-  // slideshow layer). We fullscreen THIS element rather than the <video>
-  // itself — fullscreening the bare video would strip out everything
-  // absolutely positioned around it, which is why counts used to vanish
-  // in fullscreen.
   const videoFrameRef = useRef(null);
   const scrubberWrapRef = useRef(null);
 
@@ -689,7 +688,6 @@ function DanceViewerInline({ video }) {
     }
   }, [speed]);
 
-  // Clear any pending feedback-flash timeout on unmount.
   useEffect(() => {
     return () => clearTimeout(playbackFeedbackTimeoutRef.current);
   }, []);
@@ -715,13 +713,10 @@ function DanceViewerInline({ video }) {
       frameCacheRef.current[idx] = dataUrl;
       setSlideshowFrame(dataUrl);
     } catch {
-      // Canvas is "tainted" — the video isn't served with CORS headers
-      // that allow pixel reads. Nothing to do but skip this frame.
+      // Canvas tainted — video not served with CORS-enabled pixel reads.
     }
   }
 
-  // Seek to (and capture) the beat at `slideshowIndex`, using the cache
-  // when we've already visited it.
   useEffect(() => {
     if (!slideshowOn) return;
     if (slideshowIndex < 0 || slideshowIndex >= beatTimestamps.length) return;
@@ -771,8 +766,6 @@ function DanceViewerInline({ video }) {
         );
         setSlideshowIndex(startIdx);
       } else if (videoRef.current) {
-        // Coming back from Frame View — restart from the top of the
-        // marked loop section if one exists, otherwise from the start.
         const resumeAt = loopStart !== null ? loopStart : 0;
         videoRef.current.currentTime = resumeAt;
         setCurrentTime(resumeAt);
@@ -781,8 +774,6 @@ function DanceViewerInline({ video }) {
     });
   }
 
-  // Arrow-key navigation while the slideshow is active — wraps around
-  // from the last count back to the first, and vice versa.
   useEffect(() => {
     if (!slideshowOn) return;
     function handleKeyDown(e) {
@@ -800,8 +791,6 @@ function DanceViewerInline({ video }) {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [slideshowOn, beatTimestamps.length]);
 
-  // Spacebar play/pause — ignored while the slideshow is active or while
-  // the user is typing into a form control anywhere on the page.
   useEffect(() => {
     if (slideshowOn) return;
     function handleKeyDown(e) {
@@ -822,9 +811,6 @@ function DanceViewerInline({ video }) {
         const t = videoRef.current.currentTime;
         setCurrentTime(t);
 
-        // Skip the loop-restart check while Frame View is capturing
-        // frames — otherwise its deliberate seeks race against this and
-        // get yanked back to loopStart mid-capture, repeating frames.
         if (
           !slideshowOn &&
           sectionLooping &&
@@ -873,6 +859,40 @@ function DanceViewerInline({ video }) {
   }, [draggingMarker, duration, loopStart, loopEnd]);
 
   useEffect(() => {
+    if (!draggingCrop) return;
+
+    function handleMove(e) {
+      const start = cropDragStartRef.current;
+      const frame = videoFrameRef.current;
+      if (!start || !frame) return;
+      const rect = frame.getBoundingClientRect();
+      const dxPct = ((e.clientX - start.x) / rect.width) * 100;
+      const dyPct = ((e.clientY - start.y) / rect.height) * 100;
+      const limit = maxPanForZoom(cropZoom);
+      setCropPanX(Math.max(-limit, Math.min(limit, start.panX + dxPct)));
+      setCropPanY(Math.max(-limit, Math.min(limit, start.panY + dyPct)));
+    }
+
+    function handleUp() {
+      setDraggingCrop(false);
+      cropDragStartRef.current = null;
+    }
+
+    window.addEventListener("pointermove", handleMove);
+    window.addEventListener("pointerup", handleUp);
+    return () => {
+      window.removeEventListener("pointermove", handleMove);
+      window.removeEventListener("pointerup", handleUp);
+    };
+  }, [draggingCrop, cropZoom]);
+
+  useEffect(() => {
+    const limit = maxPanForZoom(cropZoom);
+    setCropPanX((x) => Math.max(-limit, Math.min(limit, x)));
+    setCropPanY((y) => Math.max(-limit, Math.min(limit, y)));
+  }, [cropZoom]);
+
+  useEffect(() => {
     function handleFullscreenChange() {
       setIsFullscreen(document.fullscreenElement === videoFrameRef.current);
     }
@@ -909,9 +929,6 @@ function DanceViewerInline({ video }) {
   }
 
   function toggleFullscreen() {
-    // Fullscreen the wrapping frame (video + overlays), not just the
-    // <video> element, so the count badge / play-pause flash / slideshow
-    // overlay stay visible in fullscreen instead of disappearing.
     if (!videoFrameRef.current) return;
     if (document.fullscreenElement) {
       document.exitFullscreen?.();
@@ -954,7 +971,6 @@ function DanceViewerInline({ video }) {
   function markLoopStart() {
     const t = videoRef.current ? videoRef.current.currentTime : currentTime;
     if (loopEnd !== null && t >= loopEnd) {
-      // keep the range valid — push end forward slightly
       setLoopEnd(Math.min(duration, t + 1));
     }
     setLoopStart(t);
@@ -976,11 +992,6 @@ function DanceViewerInline({ video }) {
     setSectionLooping(false);
   }
 
-  // The single bottom "Loop" pill: first click opens the loop-section
-  // panel (Set start / Set end / Clear) and starts looping — the whole
-  // video if no section is marked yet, or the marked section if one
-  // already exists. A second click closes the panel, stops looping, and
-  // clears any marked start/end so the markers disappear from the scrubber.
   function toggleLoopPanel() {
     setLoopPanelOpen((open) => {
       const next = !open;
@@ -998,6 +1009,35 @@ function DanceViewerInline({ video }) {
       }
       return next;
     });
+  }
+
+  function toggleCropMode() {
+    setCropMode((open) => {
+      const next = !open;
+      if (next && videoRef.current) {
+        videoRef.current.pause();
+        setPlaying(false);
+      }
+      return next;
+    });
+  }
+
+  function resetCrop() {
+    setCropZoom(1);
+    setCropPanX(0);
+    setCropPanY(0);
+  }
+
+  function handleCropPointerDown(e) {
+    if (!cropMode || cropZoom <= 1) return;
+    e.preventDefault();
+    setDraggingCrop(true);
+    cropDragStartRef.current = {
+      x: e.clientX,
+      y: e.clientY,
+      panX: cropPanX,
+      panY: cropPanY,
+    };
   }
 
   function formatTime(seconds) {
@@ -1018,19 +1058,23 @@ function DanceViewerInline({ video }) {
   const count = currentCount();
   const hasLoopRange = loopStart !== null && loopEnd !== null;
   const isPresetSpeed = SPEED_PRESETS.includes(speed) && !customSpeedMode;
+  const cropChanged = cropZoom !== 1 || cropPanX !== 0 || cropPanY !== 0;
 
   const slideshowCount =
     slideshowOn && beatCounts[slideshowIndex] != null
       ? beatCounts[slideshowIndex]
       : null;
 
+  const videoTransform = [
+    `scale(${cropZoom})`,
+    `translate(${cropPanX}%, ${cropPanY}%)`,
+    mirrored ? "scaleX(-1)" : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+
   return (
     <div className="viewer">
-      {/* videoFrameRef now wraps the video+overlays AND the controls bar
-          below it, and this whole wrap is what gets fullscreened. If only
-          .viewer-video-frame were fullscreened, the controls (including the
-          exit-fullscreen button) live outside it as siblings and would
-          disappear along with it — same class of bug as the counts issue. */}
       <div className="viewer-video-wrap" ref={videoFrameRef}>
         <div className="viewer-video-frame">
           <video
@@ -1038,21 +1082,23 @@ function DanceViewerInline({ video }) {
             src={video.video_url}
             crossOrigin="anonymous"
             loop={looping && !sectionLooping}
-            onClick={!slideshowOn ? togglePlay : undefined}
+            onClick={!slideshowOn && !cropMode ? togglePlay : undefined}
+            onPointerDown={cropMode ? handleCropPointerDown : undefined}
             onLoadedMetadata={(e) => setDuration(e.target.duration)}
             onEnded={() => setPlaying(false)}
             style={{
               maxWidth: "100%",
-              // Capped at 75vh normally so the controls/scrubber below it
-              // always have room. In fullscreen there's no "below it" to
-              // make room for within the wrap's own height budget, so we
-              // let it grow — CSS still bounds it against the fullscreen
-              // wrap's height. Inline styles beat stylesheet rules, so
-              // this has to be reactive rather than left to CSS alone.
               maxHeight: isFullscreen ? "calc(100vh - 64px)" : "75vh",
               width: "auto",
               height: "auto",
-              transform: mirrored ? "scaleX(-1)" : "none",
+              transform: videoTransform,
+              cursor: cropMode
+                ? cropZoom > 1
+                  ? draggingCrop
+                    ? "grabbing"
+                    : "grab"
+                  : "default"
+                : "pointer",
               opacity: slideshowOn ? 0 : 1,
               pointerEvents: slideshowOn ? "none" : "auto",
             }}
@@ -1237,6 +1283,35 @@ function DanceViewerInline({ video }) {
                 )}
               </div>
             )}
+
+            {cropMode && (
+              <div className="loop-section-controls">
+                <label className="viewer-speed">
+                  Zoom
+                  <input
+                    type="range"
+                    min="1"
+                    max="3"
+                    step="0.05"
+                    value={cropZoom}
+                    onChange={(e) => setCropZoom(Number(e.target.value))}
+                  />
+                </label>
+                <span className="loop-range-label">
+                  {cropZoom > 1
+                    ? "Drag the video to reposition"
+                    : "Zoom in to crop"}
+                </span>
+                <button
+                  type="button"
+                  className="loop-clear-btn"
+                  onClick={resetCrop}
+                  disabled={!cropChanged}
+                >
+                  Reset
+                </button>
+              </div>
+            )}
           </>
         )}
       </div>
@@ -1302,6 +1377,16 @@ function DanceViewerInline({ video }) {
           onClick={toggleLoopPanel}
         >
           Loop
+        </button>
+
+        <button
+          type="button"
+          className={`toggle-pill ${cropMode ? "toggle-pill-active" : ""}`}
+          role="switch"
+          aria-checked={cropMode}
+          onClick={toggleCropMode}
+        >
+          Crop
         </button>
 
         <button
