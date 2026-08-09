@@ -711,12 +711,6 @@ body {
     0 16px 40px rgba(20, 20, 43, 0.08);
 }
 
-/* Fullscreen targets .viewer-video-wrap — the outer wrapper around BOTH
-   the video+overlays frame AND the controls bar underneath it. Earlier
-   this only fullscreened .viewer-video-frame, which left the controls
-   (play/pause, scrubber, exit-fullscreen button) behind as siblings —
-   they'd vanish along with the ability to exit fullscreen. Wrapping both
-   together keeps everything visible and interactive in fullscreen. */
 .viewer-video-wrap:fullscreen,
 .viewer-video-wrap:-webkit-full-screen {
   display: flex;
@@ -995,6 +989,11 @@ body {
   color: #8f1c17;
 }
 
+.loop-clear-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 /* ---- Beat slideshow (in place of the video) ---- */
 .slideshow-overlay {
   position: absolute;
@@ -1073,6 +1072,12 @@ body {
   border-color: #4f46e5;
   background: #fff;
   box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.12);
+}
+
+/* Crop's zoom slider reuses .viewer-speed's label styling but needs a
+   fixed width instead of the select's natural sizing. */
+.viewer-speed input[type="range"] {
+  width: 100px;
 }
 
 .viewer-speed-custom {
