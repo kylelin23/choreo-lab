@@ -1034,6 +1034,48 @@ body {
   text-align: center;
 }
 
+/* Frame View timeline — click or drag along the tick row to jump
+   directly to the nearest beat, similar to a normal video scrubber. */
+.slideshow-timeline {
+  position: relative;
+  height: 20px;
+  margin-top: 0.5rem;
+  padding: 0 0.15rem;
+  cursor: pointer;
+  touch-action: none;
+}
+
+.slideshow-timeline::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 0.15rem;
+  right: 0.15rem;
+  height: 4px;
+  transform: translateY(-50%);
+  background: #e4e4e7;
+  border-radius: 999px;
+}
+
+.slideshow-tick {
+  position: absolute;
+  top: 50%;
+  width: 6px;
+  height: 6px;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  background: #c4c4cc;
+  transition:
+    background 0.1s ease,
+    transform 0.1s ease;
+}
+
+.slideshow-tick-active {
+  background: #4f46e5;
+  width: 10px;
+  height: 10px;
+}
+
 .viewer-controls {
   display: flex;
   flex-wrap: wrap;
@@ -1074,8 +1116,6 @@ body {
   box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.12);
 }
 
-/* Crop's zoom slider reuses .viewer-speed's label styling but needs a
-   fixed width instead of the select's natural sizing. */
 .viewer-speed input[type="range"] {
   width: 100px;
 }
