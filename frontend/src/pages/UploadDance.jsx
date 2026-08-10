@@ -639,6 +639,19 @@ function getBeatIndex(t, timestamps) {
   return idx;
 }
 
+function nearestBeatIndex(time, timestamps) {
+  let closest = 0;
+  let closestDiff = Infinity;
+  for (let i = 0; i < timestamps.length; i++) {
+    const diff = Math.abs(timestamps[i] - time);
+    if (diff < closestDiff) {
+      closestDiff = diff;
+      closest = i;
+    }
+  }
+  return closest;
+}
+
 function maxPanForZoom(zoom) {
   return zoom > 1 ? ((zoom - 1) / zoom) * 50 : 0;
 }
@@ -668,6 +681,8 @@ function DanceViewerInline({ video }) {
   const [slideshowIndex, setSlideshowIndex] = useState(0);
   const [slideshowFrame, setSlideshowFrame] = useState(null);
   const [slideshowLoading, setSlideshowLoading] = useState(false);
+  const [draggingTimeline, setDraggingTimeline] = useState(false);
+  const slideshowTimelineRef = useRef(null);
   const canvasRef = useRef(null);
   const frameCacheRef = useRef({});
 
@@ -892,6 +907,43 @@ function DanceViewerInline({ video }) {
     setCropPanY((y) => Math.max(-limit, Math.min(limit, y)));
   }, [cropZoom]);
 
+  function scrubTimelineToClientX(clientX) {
+    const el = slideshowTimelineRef.current;
+    if (!el || beatTimestamps.length < 2) return;
+    const rect = el.getBoundingClientRect();
+    let frac = (clientX - rect.left) / rect.width;
+    frac = Math.min(1, Math.max(0, frac));
+    const first = beatTimestamps[0];
+    const last = beatTimestamps[beatTimestamps.length - 1];
+    const time = first + frac * (last - first);
+    setSlideshowIndex(nearestBeatIndex(time, beatTimestamps));
+  }
+
+  function handleTimelinePointerDown(e) {
+    if (beatTimestamps.length < 2) return;
+    e.preventDefault();
+    setDraggingTimeline(true);
+    scrubTimelineToClientX(e.clientX);
+  }
+
+  useEffect(() => {
+    if (!draggingTimeline) return;
+
+    function handleMove(e) {
+      scrubTimelineToClientX(e.clientX);
+    }
+    function handleUp() {
+      setDraggingTimeline(false);
+    }
+
+    window.addEventListener("pointermove", handleMove);
+    window.addEventListener("pointerup", handleUp);
+    return () => {
+      window.removeEventListener("pointermove", handleMove);
+      window.removeEventListener("pointerup", handleUp);
+    };
+  }, [draggingTimeline, beatTimestamps]);
+
   useEffect(() => {
     function handleFullscreenChange() {
       setIsFullscreen(document.fullscreenElement === videoFrameRef.current);
@@ -1073,6 +1125,10 @@ function DanceViewerInline({ video }) {
     .filter(Boolean)
     .join(" ");
 
+  const timelineFirst = beatTimestamps[0];
+  const timelineLast = beatTimestamps[beatTimestamps.length - 1];
+  const timelineRange = timelineLast - timelineFirst;
+
   return (
     <div className="viewer">
       <div className="viewer-video-wrap" ref={videoFrameRef}>
@@ -1144,31 +1200,57 @@ function DanceViewerInline({ video }) {
         </div>
 
         {slideshowOn ? (
-          <div className="slideshow-nav">
-            <button
-              type="button"
-              className="control-btn"
-              onClick={() => goToSlideshowIndex(slideshowIndex - 1)}
-              disabled={beatTimestamps.length === 0}
-              aria-label="Previous count"
-            >
-              <ChevronLeftIcon />
-            </button>
-            <span className="slideshow-position">
-              {beatTimestamps.length > 0
-                ? `Count ${slideshowIndex + 1} of ${beatTimestamps.length}`
-                : "No counts detected for this video"}
-            </span>
-            <button
-              type="button"
-              className="control-btn"
-              onClick={() => goToSlideshowIndex(slideshowIndex + 1)}
-              disabled={beatTimestamps.length === 0}
-              aria-label="Next count"
-            >
-              <ChevronRightIcon />
-            </button>
-          </div>
+          <>
+            <div className="slideshow-nav">
+              <button
+                type="button"
+                className="control-btn"
+                onClick={() => goToSlideshowIndex(slideshowIndex - 1)}
+                disabled={beatTimestamps.length === 0}
+                aria-label="Previous count"
+              >
+                <ChevronLeftIcon />
+              </button>
+              <span className="slideshow-position">
+                {beatTimestamps.length > 0
+                  ? `Count ${slideshowIndex + 1} of ${beatTimestamps.length}`
+                  : "No counts detected for this video"}
+              </span>
+              <button
+                type="button"
+                className="control-btn"
+                onClick={() => goToSlideshowIndex(slideshowIndex + 1)}
+                disabled={beatTimestamps.length === 0}
+                aria-label="Next count"
+              >
+                <ChevronRightIcon />
+              </button>
+            </div>
+
+            {beatTimestamps.length > 1 && (
+              <div
+                className="slideshow-timeline"
+                ref={slideshowTimelineRef}
+                onPointerDown={handleTimelinePointerDown}
+              >
+                {beatTimestamps.map((t, i) => {
+                  const leftPct =
+                    timelineRange > 0
+                      ? ((t - timelineFirst) / timelineRange) * 100
+                      : 0;
+                  return (
+                    <div
+                      key={i}
+                      className={`slideshow-tick ${
+                        i === slideshowIndex ? "slideshow-tick-active" : ""
+                      }`}
+                      style={{ left: `${leftPct}%` }}
+                    />
+                  );
+                })}
+              </div>
+            )}
+          </>
         ) : (
           <>
             <div className="custom-controls">
