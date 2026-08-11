@@ -17,7 +17,7 @@ Production Deployment: http://18.237.24.57:5173/
 - Object Storage: Amazon S3
 - Message Queue: Amazon SQS
 - Background Workers: AWS Lambda
-- State Caching: Redis
+- Auth & Rate Limiting: Redis
 - Containerization: Docker
 - Deployment: AWS EC2
 
