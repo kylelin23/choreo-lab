@@ -67,7 +67,8 @@ COUNTS_PER_CYCLE = 8
 # (useful for fast, free, deterministic API tests).
 USE_LLM = os.environ.get("BEAT_SYNC_USE_LLM", "1") != "0"
 LLM_MODEL = os.environ.get("BEAT_SYNC_MODEL", "claude-opus-4-8")
-LLM_EFFORT = os.environ.get("BEAT_SYNC_EFFORT", "medium")   # low | medium | high | max
+# low | medium | high | max
+LLM_EFFORT = os.environ.get("BEAT_SYNC_EFFORT", "medium")
 LLM_MAX_TOKENS = 4096
 
 # Where training examples live. Claude reads these as few-shot precedents.
@@ -136,7 +137,8 @@ def detect_beats_and_sync(input_path: str, output_path: str) -> dict:
     counts: list[int] = []
     if facts.beats:
         phase, detector = _resolve_downbeat(facts)
-        counts = [((b.index - phase) % COUNTS_PER_CYCLE) + 1 for b in facts.beats]
+        counts = [((b.index - phase) % COUNTS_PER_CYCLE) +
+                  1 for b in facts.beats]
         print(f"[beat_sync] downbeat via {detector}, phase {phase}, "
               f"{len(facts.beats)} beats @ {facts.bpm:.1f} bpm")
 
@@ -165,7 +167,8 @@ def _detect_beats(audio: np.ndarray, sr: int) -> BeatFacts:
     if audio.size == 0:
         return BeatFacts(bpm=0.0, duration_sec=0.0, beats=[], bass_present=False)
 
-    onset_env = librosa.onset.onset_strength(y=audio, sr=sr, hop_length=HOP_LENGTH)
+    onset_env = librosa.onset.onset_strength(
+        y=audio, sr=sr, hop_length=HOP_LENGTH)
     tempo, beat_frames = librosa.beat.beat_track(
         onset_envelope=onset_env, sr=sr, hop_length=HOP_LENGTH, units="frames"
     )
@@ -175,7 +178,8 @@ def _detect_beats(audio: np.ndarray, sr: int) -> BeatFacts:
     if beat_frames.size == 0:
         return BeatFacts(bpm=bpm, duration_sec=duration, beats=[], bass_present=False)
 
-    beat_times = librosa.frames_to_time(beat_frames, sr=sr, hop_length=HOP_LENGTH)
+    beat_times = librosa.frames_to_time(
+        beat_frames, sr=sr, hop_length=HOP_LENGTH)
     onset_at = _normalise(_sample_peak(onset_env, beat_frames))
     low_env, bass_share = _low_band_energy(audio, sr)
     kick_at = _normalise(_sample_peak(low_env, beat_frames))
@@ -219,7 +223,8 @@ def _low_band_energy(audio: np.ndarray, sr: int) -> tuple[np.ndarray, float]:
     low = sosfiltfilt(sos, audio).astype(np.float32)
 
     n_frames = 1 + audio.size // HOP_LENGTH
-    per_frame = np.zeros(n_frames, dtype=np.float32)  # energy on librosa's hop grid
+    # energy on librosa's hop grid
+    per_frame = np.zeros(n_frames, dtype=np.float32)
     for i in range(n_frames):
         seg = low[i * HOP_LENGTH:(i + 1) * HOP_LENGTH]
         if seg.size:
@@ -257,7 +262,8 @@ def _resolve_downbeat(facts: BeatFacts) -> tuple[int, str]:
 
 def _heuristic_phase(facts: BeatFacts) -> int:
     """The strongest-kick position in the cycle is count 1."""
-    cue = np.array([b.kick if facts.bass_present else b.onset for b in facts.beats])
+    cue = np.array(
+        [b.kick if facts.bass_present else b.onset for b in facts.beats])
     scores = [cue[p::COUNTS_PER_CYCLE].mean() if cue[p::COUNTS_PER_CYCLE].size else 0.0
               for p in range(COUNTS_PER_CYCLE)]
     return int(np.argmax(scores))
@@ -312,7 +318,8 @@ def _llm_one_indices(facts: BeatFacts) -> list[int]:
         thinking={"type": "adaptive"},
     )
     response = client.messages.create(**kwargs)
-    text = next((b.text for b in response.content if getattr(b, "type", None) == "text"), None)
+    text = next((b.text for b in response.content if getattr(
+        b, "type", None) == "text"), None)
     if text is None:
         raise ValueError("model returned no text block")
     data = json.loads(text)
@@ -393,8 +400,10 @@ def add_example(
     }
 
     examples = _load_examples()
-    examples = [e for e in examples if e.get("name") != example["name"]] + [example]
-    Path(EXAMPLES_PATH).write_text(json.dumps(examples, indent=2), encoding="utf-8")
+    examples = [e for e in examples if e.get(
+        "name") != example["name"]] + [example]
+    Path(EXAMPLES_PATH).write_text(json.dumps(
+        examples, indent=2), encoding="utf-8")
     print(f"[beat_sync] saved example {example['name']!r} to {EXAMPLES_PATH} "
           f"({len(examples)} total)")
     return example
@@ -429,11 +438,12 @@ def _write_output(input_path: str, output_path: str) -> None:
         if result.returncode == 0 and out.exists():
             return  # transcoded successfully
 
-    shutil.copyfile(input_path, output_path)  # fallback: copy the source through
+    # fallback: copy the source through
+    shutil.copyfile(input_path, output_path)
 
 
 if __name__ == "__main__":
     import sys
 
-    print(json.dumps(detect_beats_and_sync(sys.argv[1], sys.argv[2]), indent=2))
-
+    print(json.dumps(detect_beats_and_sync(
+        sys.argv[1], sys.argv[2]), indent=2))

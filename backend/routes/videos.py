@@ -36,11 +36,11 @@ def status_route(video_id):
     if error:
         return jsonify({"error": error}), 401
 
-    status, error = get_video_status(video_id)
+    result, error = get_video_status(video_id)
     if error:
         return jsonify({"error": error}), 404
 
-    return jsonify({"status": status})
+    return jsonify(result)
 
 
 @videos_bp.route('/api/videos/<video_id>', methods=['GET'])
