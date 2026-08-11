@@ -1,14 +1,10 @@
 import uuid
-import threading
+import json
 from datetime import datetime, timezone
 
-from clients import s3_client, videos_table, redis_client, S3_BUCKET_NAME
-from processing.video_processor import process_video
+from clients import s3_client, videos_table, sqs_client, S3_BUCKET_NAME, SQS_QUEUE_URL
 
 ALLOWED_EXTENSIONS = {".mp4", ".mov"}
-
-# Uploads file to S3, writes record to DynamoDB, writes status to Redis
-# Also starts a background thread for video to process
 
 
 def upload_video(file, user_id):
@@ -37,13 +33,14 @@ def upload_video(file, user_id):
         "filename": file.filename,
         "created_at": datetime.now(timezone.utc).isoformat(),
     })
-    redis_client.set(f"job:{video_id}", "processing")
 
-    thread = threading.Thread(
-        target=process_video,
-        args=(video_id, user_id, raw_key),
-        daemon=True,
+    sqs_client.send_message(
+        QueueUrl=SQS_QUEUE_URL,
+        MessageBody=json.dumps({
+            "video_id": video_id,
+            "user_id": user_id,
+            "raw_key": raw_key,
+        }),
     )
-    thread.start()
 
     return video_id, None

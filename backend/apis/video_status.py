@@ -1,8 +1,15 @@
-from clients import redis_client
+from clients import videos_table
 
-# Gets the video status from Redis, used for polling
+
 def get_video_status(video_id):
-    status = redis_client.get(f"job:{video_id}")
-    if status is None:
+    result = videos_table.get_item(Key={"video_id": video_id})
+    item = result.get("Item")
+    if item is None:
         return None, "job not found"
-    return status, None
+
+    status = item.get("status")
+    response = {"status": status}
+    if status == "failed" and item.get("error"):
+        response["error"] = item["error"]
+
+    return response, None

@@ -1,0 +1,5 @@
+boto3
+librosa
+numpy
+opencv-python-headless
+anthropic
