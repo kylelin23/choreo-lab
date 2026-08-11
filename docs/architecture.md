@@ -34,22 +34,22 @@ The backend is written in Python/Flask, and are rate limited to prevent maliciou
 
 | Endpoint | Method | Description |
 |---|---|---|
-| `/api/videos/upload` | POST | Accepts an mp4/mov file and returns a `video_id` corresponding to the uploaded video. Uploads the raw video to S3, writes a job record to DynamoDB, writes job status to Redis, and starts background processing in a thread and runs `video_processor.py`. |
-| `/api/videos/status/<video_id>` | GET | Returns the current processing status (`processing`, `done`, or `failed`) from Redis. Used to poll if the video is done processing. |
-| `/api/videos/<video_id>` | GET | Returns a presigned S3 URL for the processed video when a user clicks on a video in the library list view. |
+| `/api/videos/upload` | POST | Accepts an mp4/mov file and returns a `video_id` corresponding to the uploaded video. Uploads the raw video to S3, writes a job record to DynamoDB, and sends message to SQS. |
+| `/api/videos/status/<video_id>` | GET | Returns the current processing status (`processing`, `done`, or `failed`) from DynamoDB. Used to poll if the video is done processing. |
+| `/api/videos/<video_id>` | GET | Returns a presigned S3 URL for the processed video and beat data when a user clicks on a video in the library list view. |
 | `/api/videos` | GET | Returns all videos belonging to the current user for the library list view. |
 | `/api/videos/<video_id>` | PATCH | Allows user to give the video a custom name. |
 | `/api/videos/<video_id>` | DELETE | Deletes a video's S3 objects and DynamoDB record. |
 
 ### Video Processing Flow
-- User sends video file over to backend in `upload_video` POST request
-- Raw video uploaded to Amazon S3, job record written to Amazon DynamoDB, and job status written to Redis
-- Frontend gets video ID back and polls using `video_status` endpoint to see if that video ID is processed
-- Backend starts a background thread and runs `video_processor.py`
-- `video_processor.py` gets video from Amazon S3 and runs `beat_sync.py`
-- `beat_sync.py` processes the video and processed video is uploaded back to Amazon S3
-- DynamoDB and Redis video states are updated
-- Frontend polling finally succeeds because of updated state in Redis and retrieves processed video from Amazon S3
+- User sends video file over to backend with `POST /api/videos/upload`
+- Raw video uploaded to Amazon S3 and job record written to Amazon DynamoDB
+- Frontend gets video ID back and polls using `GET /api/videos/status/<id>` to see if that video ID is processed
+- Flask sends a message to SQS
+- SQS triggers Lambda and runs `beat_sync.py`, which processes the video, adding 8-counts
+- Processed video is uploaded back to Amazon S3 and DynamoDB job status is updated
+- Frontend polling finally succeeds because of updated state in DynamoDB and calls `GET /api/videos/<id>`
+- Presigned URL is returned and frontend uses that to get processed video from S3
 
 ### Model
 - Takes a raw dance video and works out its rhythm.
@@ -63,7 +63,8 @@ The backend is written in Python/Flask, and are rate limited to prevent maliciou
 ### Data Storage
 - Amazon DynamoDB: Database (user and video information)
 - Amazon S3: Object storage (videos)
-- Redis: Tracks state of video processing
+- Redis: Auth token blocklist and rate-limiting counters
+- Amazon SQS: Job queue for triggering video processing
 
 ### Containerization and Deployment
-The app will be containerized in Docker and deployed on Amazon EC2.
+The app is containerized using Docker and deployed on Amazon EC2.
