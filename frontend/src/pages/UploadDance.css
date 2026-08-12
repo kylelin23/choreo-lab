@@ -66,6 +66,13 @@ body {
   font-weight: 700;
   letter-spacing: -0.01em;
   color: #18181b;
+  text-decoration: none;
+  cursor: pointer;
+  transition: color 0.15s ease;
+}
+
+.topbar-brand:hover {
+  color: #4f46e5;
 }
 
 .topbar-avatar-wrap {
@@ -651,6 +658,7 @@ body {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  gap: 0.5rem;
   margin-top: 1.25rem;
   padding: 0.9rem 1.75rem;
   border: none;
@@ -682,6 +690,11 @@ body {
   background: #d4d4f5;
   box-shadow: none;
   cursor: not-allowed;
+}
+
+.stage-upload-btn svg {
+  width: 16px;
+  height: 16px;
 }
 
 .stage-empty-hint {

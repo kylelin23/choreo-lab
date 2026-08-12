@@ -94,3 +94,9 @@ export function renameVideo(videoId, name) {
     body: JSON.stringify({ name }),
   });
 }
+
+// Public / demo
+
+export function getDemoVideo() {
+  return request("/api/demo/video", { method: "GET" });
+}
