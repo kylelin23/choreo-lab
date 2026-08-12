@@ -1,640 +1,103 @@
 import { useState, useEffect, useRef } from "react";
-import { Link } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import "../index.css";
+import "./Home.css";
 import "./UploadDance.css";
-import {
-  logout as apiLogout,
-  uploadVideo,
-  getVideoStatus,
-  listVideos,
-  getVideo,
-  deleteVideo,
-  renameVideo,
-} from "../lib/api";
+import { getDemoVideo } from "../lib/api";
 
-function UploadDance({ email, onLogout }) {
-  const [videos, setVideos] = useState([]);
-  const [uploading, setUploading] = useState(false);
-  const [elapsedSeconds, setElapsedSeconds] = useState(0);
-  const [error, setError] = useState("");
-  const [selectedVideo, setSelectedVideo] = useState(null);
-  const [selectedVideoId, setSelectedVideoId] = useState(null);
-  const [loadingVideo, setLoadingVideo] = useState(false);
-  const [deletingId, setDeletingId] = useState(null);
-  const [renamingId, setRenamingId] = useState(null);
-  const [renameInput, setRenameInput] = useState("");
-  const [savingRename, setSavingRename] = useState(false);
-  const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
-  const [menuOpen, setMenuOpen] = useState(false);
-  const [avatarMenuOpen, setAvatarMenuOpen] = useState(false);
-  const fileInputRef = useRef(null);
-  const pollRef = useRef(null);
-  const timerRef = useRef(null);
-  const avatarMenuRef = useRef(null);
+const HERO_TITLE = "Learn new dance choreography faster with Choreo Lab! ";
+const TYPING_SPEED_MS = 35;
+
+function useTypewriter(text, speed) {
+  const [displayed, setDisplayed] = useState("");
+  const [done, setDone] = useState(false);
 
   useEffect(() => {
-    refreshVideos();
-    return () => {
-      clearInterval(pollRef.current);
-      clearInterval(timerRef.current);
-    };
+    setDisplayed("");
+    setDone(false);
+    let i = 0;
+    const interval = setInterval(() => {
+      i += 1;
+      setDisplayed(text.slice(0, i));
+      if (i >= text.length) {
+        clearInterval(interval);
+        setDone(true);
+      }
+    }, speed);
+    return () => clearInterval(interval);
+  }, [text, speed]);
+
+  return { displayed, done };
+}
+
+function Home() {
+  const [demoVideo, setDemoVideo] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const navigate = useNavigate();
+
+  const { displayed: titleText, done: titleDone } = useTypewriter(
+    HERO_TITLE,
+    TYPING_SPEED_MS,
+  );
+
+  useEffect(() => {
+    getDemoVideo()
+      .then(setDemoVideo)
+      .catch((err) => setError(err.message))
+      .finally(() => setLoading(false));
   }, []);
 
-  useEffect(() => {
-    if (!avatarMenuOpen) return;
-    function handleClickOutside(e) {
-      if (avatarMenuRef.current && !avatarMenuRef.current.contains(e.target)) {
-        setAvatarMenuOpen(false);
-      }
-    }
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, [avatarMenuOpen]);
-
-  async function refreshVideos() {
-    try {
-      const data = await listVideos();
-      setVideos(data.videos || []);
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setHasLoadedOnce(true);
-    }
-  }
-
-  const handleLogout = async () => {
-    await apiLogout();
-    onLogout();
-  };
-
-  const handleUploadClick = () => {
-    fileInputRef.current?.click();
-  };
-
-  async function handleUpload(file) {
-    if (!file) return;
-
-    setError("");
-    setUploading(true);
-    setElapsedSeconds(0);
-    timerRef.current = setInterval(() => {
-      setElapsedSeconds((s) => s + 1);
-    }, 1000);
-
-    try {
-      const { video_id } = await uploadVideo(file);
-      await refreshVideos();
-      pollStatus(video_id);
-    } catch (err) {
-      setError(err.message);
-      setUploading(false);
-      clearInterval(timerRef.current);
-    }
-  }
-
-  const handleFileSelected = async (e) => {
-    const file = e.target.files[0];
-    await handleUpload(file);
-    e.target.value = "";
-  };
-
-  const [dragActive, setDragActive] = useState(false);
-
-  function handleDrop(e) {
-    e.preventDefault();
-    setDragActive(false);
-    const file = e.dataTransfer.files?.[0];
-    if (file) handleUpload(file);
-  }
-
-  function pollStatus(videoId) {
-    pollRef.current = setInterval(async () => {
-      try {
-        const { status } = await getVideoStatus(videoId);
-        if (status === "done" || status === "failed") {
-          clearInterval(pollRef.current);
-          clearInterval(timerRef.current);
-          setUploading(false);
-          await refreshVideos();
-          if (status === "done") {
-            handleViewVideo(videoId);
-          }
-        }
-      } catch (err) {
-        clearInterval(pollRef.current);
-        clearInterval(timerRef.current);
-        setUploading(false);
-        setError(err.message);
-      }
-    }, 2500);
-  }
-
-  async function handleViewVideo(videoId) {
-    setError("");
-    setLoadingVideo(true);
-    setSelectedVideoId(videoId);
-    try {
-      const data = await getVideo(videoId);
-      setSelectedVideo(data);
-      setMenuOpen(false);
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setLoadingVideo(false);
-    }
-  }
-
-  async function handleDeleteVideo(videoId) {
-    if (!window.confirm("Delete this dance? This can't be undone.")) return;
-
-    setError("");
-    setDeletingId(videoId);
-    try {
-      await deleteVideo(videoId);
-      if (videoId === selectedVideoId) {
-        setSelectedVideo(null);
-        setSelectedVideoId(null);
-      }
-      await refreshVideos();
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setDeletingId(null);
-    }
-  }
-
-  function startRename(video) {
-    setRenamingId(video.video_id);
-    setRenameInput(video.name || "");
-  }
-
-  function cancelRename() {
-    setRenamingId(null);
-    setRenameInput("");
-  }
-
-  async function submitRename(videoId) {
-    const trimmed = renameInput.trim();
-    if (!trimmed) {
-      cancelRename();
-      return;
-    }
-
-    setError("");
-    setSavingRename(true);
-    try {
-      await renameVideo(videoId, trimmed);
-      await refreshVideos();
-      cancelRename();
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setSavingRename(false);
-    }
-  }
-
-  function formatElapsed(seconds) {
-    const m = Math.floor(seconds / 60);
-    const s = seconds % 60;
-    return m > 0 ? `${m}m ${s}s` : `${s}s`;
-  }
-
-  const hasAnyVideos = videos.length > 0;
-  const hasCompletedVideos = videos.some((v) => v.status === "done");
-  const avatarInitial = email ? email[0].toUpperCase() : "?";
-
   return (
-    <div className="shell">
-      <header className="topbar">
-        <button
-          className="menu-trigger"
-          onClick={() => setMenuOpen((o) => !o)}
-          aria-label={menuOpen ? "Close menu" : "Select a dance"}
-          aria-expanded={menuOpen}
-        >
-          <ListIcon />
-          {menuOpen ? "Close" : "Select a Dance"}
-        </button>
-        <Link to="/" className="topbar-brand">
-          Choreo Lab
-        </Link>
-        <div className="topbar-avatar-wrap" ref={avatarMenuRef}>
-          <button
-            className="topbar-avatar"
-            onClick={() => setAvatarMenuOpen((o) => !o)}
-            aria-label="Account menu"
-            aria-expanded={avatarMenuOpen}
-            title={email}
-          >
-            {avatarInitial}
+    <div className="home-page">
+      <header className="home-topbar">
+        <span className="home-brand">Choreo Lab</span>
+        <div className="home-cta">
+          <button className="home-btn-ghost" onClick={() => navigate("/login")}>
+            Log in
           </button>
-          {avatarMenuOpen && (
-            <div className="avatar-menu">
-              <p className="avatar-menu-email">{email}</p>
-              <button
-                className="avatar-menu-item"
-                onClick={() => {
-                  setAvatarMenuOpen(false);
-                  handleLogout();
-                }}
-              >
-                <LogoutIcon />
-                Sign out
-              </button>
-            </div>
-          )}
+          <button
+            className="home-btn-primary"
+            onClick={() => navigate("/signup")}
+          >
+            Sign up
+          </button>
         </div>
       </header>
 
-      {menuOpen && (
-        <div className="drawer-backdrop" onClick={() => setMenuOpen(false)} />
-      )}
-
-      <aside className={`drawer ${menuOpen ? "drawer-open" : ""}`}>
-        <div className="drawer-user">
-          <span className="rail-avatar" aria-hidden="true">
-            {avatarInitial}
+      <main className="home-hero">
+        <h1 aria-label={HERO_TITLE}>
+          <span aria-hidden="true">
+            {titleText}
+            <span
+              className={`home-caret ${titleDone ? "home-caret-blink" : ""}`}
+            />
           </span>
-          <span className="rail-email">{email}</span>
-        </div>
-
-        <input
-          type="file"
-          accept="video/mp4,video/quicktime"
-          ref={fileInputRef}
-          onChange={handleFileSelected}
-          style={{ display: "none" }}
-        />
+        </h1>
+        <p>
+          Upload a dance video and learn faster with AI-detected counts, custom
+          looping/speed, and more!
+        </p>
 
         <button
-          className="upload-btn"
-          onClick={handleUploadClick}
-          disabled={uploading}
+          className="home-btn-primary home-btn-hero"
+          onClick={() => navigate("/login")}
         >
-          {uploading ? (
-            <span className="spinner" aria-hidden="true" />
-          ) : (
-            "+ Upload Dance"
-          )}
+          Start Learning
         </button>
 
-        {uploading && (
-          <p className="processing-note" aria-live="polite">
-            This can take a minute or two. Elapsed:{" "}
-            <strong>{formatElapsed(elapsedSeconds)}</strong>
-          </p>
-        )}
+        {loading && <div className="home-demo-loading">Loading demo…</div>}
 
-        {error && (
-          <p className="upload-error" role="alert" aria-live="polite">
-            <AlertIcon />
-            {error}
-          </p>
-        )}
-
-        <nav className="rail-list">
-          <p className="rail-list-label">Your dances</p>
-          {!hasAnyVideos ? (
-            <div className="rail-empty">
-              <FilmIcon />
-              <p>Nothing uploaded yet</p>
-            </div>
-          ) : (
-            <ul>
-              {videos.map((v) => (
-                <li key={v.video_id} className="rail-item-row">
-                  {renamingId === v.video_id ? (
-                    <div className="rail-rename-form">
-                      <input
-                        type="text"
-                        className="rail-rename-input"
-                        value={renameInput}
-                        onChange={(e) => setRenameInput(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter") submitRename(v.video_id);
-                          if (e.key === "Escape") cancelRename();
-                        }}
-                        maxLength={100}
-                        autoFocus
-                        disabled={savingRename}
-                      />
-                      <button
-                        type="button"
-                        className="rail-rename-btn"
-                        onClick={() => submitRename(v.video_id)}
-                        disabled={savingRename}
-                        aria-label="Save name"
-                      >
-                        {savingRename ? (
-                          <span className="spinner" aria-hidden="true" />
-                        ) : (
-                          <CheckIcon />
-                        )}
-                      </button>
-                      <button
-                        type="button"
-                        className="rail-rename-btn"
-                        onClick={cancelRename}
-                        disabled={savingRename}
-                        aria-label="Cancel rename"
-                      >
-                        <XIcon />
-                      </button>
-                    </div>
-                  ) : (
-                    <>
-                      <button
-                        className={`rail-item ${
-                          v.video_id === selectedVideoId
-                            ? "rail-item-active"
-                            : ""
-                        }`}
-                        onClick={() =>
-                          v.status === "done" && handleViewVideo(v.video_id)
-                        }
-                        disabled={v.status !== "done"}
-                      >
-                        <span className="rail-item-date">
-                          {v.name} ·{" "}
-                          {new Date(v.created_at).toLocaleDateString()}
-                        </span>
-                        <span
-                          className={`status-badge status-badge-${v.status}`}
-                        >
-                          <span
-                            className={`status-dot status-dot-${v.status}`}
-                          />
-                          {v.status === "processing" ? "processing…" : v.status}
-                        </span>
-                      </button>
-                      <button
-                        className="rail-delete-btn"
-                        onClick={() => startRename(v)}
-                        aria-label={`Rename ${v.name || "this dance"}`}
-                        title="Rename"
-                      >
-                        <PencilIcon />
-                      </button>
-                      <button
-                        className="rail-delete-btn"
-                        onClick={() => handleDeleteVideo(v.video_id)}
-                        disabled={deletingId === v.video_id}
-                        aria-label={`Delete ${v.name || "this dance"}`}
-                        title="Delete"
-                      >
-                        {deletingId === v.video_id ? (
-                          <span className="spinner" aria-hidden="true" />
-                        ) : (
-                          <TrashIcon />
-                        )}
-                      </button>
-                    </>
-                  )}
-                </li>
-              ))}
-            </ul>
-          )}
-        </nav>
-
-        <button className="rail-logout" onClick={handleLogout}>
-          <LogoutIcon />
-          Log out
-        </button>
-      </aside>
-
-      <main className="stage">
-        {selectedVideo ? (
-          <DanceViewerInline
-            key={selectedVideo.video_id}
-            video={selectedVideo}
-          />
-        ) : hasLoadedOnce && !hasAnyVideos ? (
-          <div
-            className={`stage-empty stage-dropzone ${
-              dragActive ? "stage-dropzone-active" : ""
-            }`}
-            onDragOver={(e) => {
-              e.preventDefault();
-              setDragActive(true);
-            }}
-            onDragLeave={() => setDragActive(false)}
-            onDrop={handleDrop}
-          >
-            <span className="stage-empty-icon" aria-hidden="true">
-              <UploadCloudIcon />
-            </span>
-            <h2>Upload your first dance</h2>
-            <p>
-              Drag and drop a non-copyrighted video here, or click below to
-              choose a file.
-            </p>
-            <button
-              className="stage-upload-btn"
-              onClick={handleUploadClick}
-              disabled={uploading}
-            >
-              {uploading ? (
-                <span className="spinner" aria-hidden="true" />
-              ) : (
-                "+ Upload Dance"
-              )}
-            </button>
-          </div>
-        ) : hasCompletedVideos ? (
-          <div className="stage-empty">
-            <span className="stage-empty-icon" aria-hidden="true">
-              <FilmIcon />
-            </span>
-            <h2>Pick a dance</h2>
-            <p>Open the menu and select one to view it here.</p>
-            <button
-              className="stage-upload-btn"
-              onClick={() => setMenuOpen(true)}
-            >
-              <ListIcon />
-              Select a Dance
-            </button>
-          </div>
-        ) : (
-          <div className="stage-empty">
-            <span className="stage-empty-icon" aria-hidden="true">
-              <span className="spinner spinner-dark" />
-            </span>
-            <h2>Still processing</h2>
-            <p>
-              Your upload is being processed — this can take a minute or two.
-              It'll show up here once it's ready.
-            </p>
+        {!loading && error && (
+          <div className="home-demo-error">
+            Demo video isn't available right now — sign up to try it with your
+            own video.
           </div>
         )}
+
+        {!loading && demoVideo && <DanceViewerInline video={demoVideo} />}
       </main>
     </div>
-  );
-}
-
-function ListIcon() {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <line x1="8" y1="6" x2="21" y2="6" />
-      <line x1="8" y1="12" x2="21" y2="12" />
-      <line x1="8" y1="18" x2="21" y2="18" />
-      <line x1="3" y1="6" x2="3.01" y2="6" />
-      <line x1="3" y1="12" x2="3.01" y2="12" />
-      <line x1="3" y1="18" x2="3.01" y2="18" />
-    </svg>
-  );
-}
-
-function AlertIcon() {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <circle cx="12" cy="12" r="10" />
-      <line x1="12" y1="8" x2="12" y2="12" />
-      <line x1="12" y1="16" x2="12.01" y2="16" />
-    </svg>
-  );
-}
-
-function LogoutIcon() {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
-      <polyline points="16 17 21 12 16 7" />
-      <line x1="21" y1="12" x2="9" y2="12" />
-    </svg>
-  );
-}
-
-function FilmIcon() {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <rect x="2" y="3" width="20" height="18" rx="2" ry="2" />
-      <line x1="7" y1="3" x2="7" y2="21" />
-      <line x1="17" y1="3" x2="17" y2="21" />
-      <line x1="2" y1="9" x2="7" y2="9" />
-      <line x1="2" y1="15" x2="7" y2="15" />
-      <line x1="17" y1="9" x2="22" y2="9" />
-      <line x1="17" y1="15" x2="22" y2="15" />
-    </svg>
-  );
-}
-
-function TrashIcon() {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <polyline points="3 6 5 6 21 6" />
-      <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
-      <path d="M10 11v6" />
-      <path d="M14 11v6" />
-      <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
-    </svg>
-  );
-}
-
-function PencilIcon() {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
-    </svg>
-  );
-}
-
-function CheckIcon() {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <polyline points="20 6 9 17 4 12" />
-    </svg>
-  );
-}
-
-function XIcon() {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <line x1="18" y1="6" x2="6" y2="18" />
-      <line x1="6" y1="6" x2="18" y2="18" />
-    </svg>
-  );
-}
-
-function UploadCloudIcon() {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <path d="M16 16l-4-4-4 4" />
-      <line x1="12" y1="12" x2="12" y2="21" />
-      <path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3" />
-    </svg>
   );
 }
 
@@ -649,23 +112,13 @@ function getBeatIndex(t, timestamps) {
   return idx;
 }
 
-function nearestBeatIndex(time, timestamps) {
-  let closest = 0;
-  let closestDiff = Infinity;
-  for (let i = 0; i < timestamps.length; i++) {
-    const diff = Math.abs(timestamps[i] - time);
-    if (diff < closestDiff) {
-      closestDiff = diff;
-      closest = i;
-    }
-  }
-  return closest;
-}
-
 function maxPanForZoom(zoom) {
   return zoom > 1 ? ((zoom - 1) / zoom) * 50 : 0;
 }
 
+// Identical to UploadDance.jsx's DanceViewerInline — same component, same
+// classes, same behavior — so the demo on the public Home page looks and
+// feels exactly like the authenticated viewer.
 function DanceViewerInline({ video }) {
   const [speed, setSpeed] = useState(1);
   const [customSpeedMode, setCustomSpeedMode] = useState(false);
@@ -1501,6 +954,19 @@ function DanceViewerInline({ video }) {
   );
 }
 
+function nearestBeatIndex(time, timestamps) {
+  let closest = 0;
+  let closestDiff = Infinity;
+  for (let i = 0; i < timestamps.length; i++) {
+    const diff = Math.abs(timestamps[i] - time);
+    if (diff < closestDiff) {
+      closestDiff = diff;
+      closest = i;
+    }
+  }
+  return closest;
+}
+
 function PlayIcon() {
   return (
     <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
@@ -1624,4 +1090,4 @@ function FullscreenExitIcon() {
   );
 }
 
-export default UploadDance;
+export default Home;

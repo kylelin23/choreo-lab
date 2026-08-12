@@ -1,9 +1,26 @@
+.auth-topbar-brand {
+  position: fixed;
+  top: 1.25rem;
+  left: 2rem;
+  font-size: 1.1rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: #18181b;
+  text-decoration: none;
+}
+
+.auth-topbar-brand:hover {
+  color: #4f46e5;
+}
+
 .card {
   background: #fff;
   padding: 2.75rem;
   border: 1px solid rgba(0, 0, 0, 0.04);
   border-radius: 18px;
-  box-shadow: 0 1px 2px rgba(20, 20, 43, 0.04), 0 16px 40px rgba(20, 20, 43, 0.08);
+  box-shadow:
+    0 1px 2px rgba(20, 20, 43, 0.04),
+    0 16px 40px rgba(20, 20, 43, 0.08);
   width: 100%;
   max-width: 380px;
   text-align: center;
@@ -90,7 +107,10 @@ input {
   font-size: 1rem;
   font-family: inherit;
   color: #18181b;
-  transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease,
+    background 0.15s ease;
 }
 
 input::placeholder {
@@ -136,7 +156,9 @@ input:disabled {
   background: none;
   color: #9a9aa2;
   cursor: pointer;
-  transition: color 0.15s ease, background 0.15s ease;
+  transition:
+    color 0.15s ease,
+    background 0.15s ease;
 }
 
 .password-toggle svg {
@@ -168,7 +190,10 @@ button[type="submit"] {
   cursor: pointer;
   margin-top: 0.25rem;
   box-shadow: 0 1px 2px rgba(79, 70, 229, 0.15);
-  transition: background 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
+  transition:
+    background 0.15s ease,
+    box-shadow 0.15s ease,
+    transform 0.15s ease;
 }
 
 button[type="submit"]:hover:not(:disabled) {
@@ -242,5 +267,10 @@ button[type="submit"]:disabled {
 @media (max-width: 400px) {
   .card {
     padding: 1.75rem 1.5rem;
+  }
+
+  .auth-topbar-brand {
+    top: 1rem;
+    left: 1.25rem;
   }
 }

@@ -3,7 +3,8 @@ import { Link } from "react-router-dom";
 import { login, register } from "../lib/api";
 import "./Auth.css";
 
-function Auth({ mode, email, setEmail, onSuccess }) {
+function Auth({ mode, onSuccess }) {
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -16,11 +17,11 @@ function Auth({ mode, email, setEmail, onSuccess }) {
     try {
       if (mode === "login") {
         await login(email, password);
-        onSuccess();
+        onSuccess(email);
       } else {
         const result = await register(email, password);
         if (result.email) {
-          onSuccess();
+          onSuccess(result.email);
         } else {
           setError("Check your email to confirm your account, then log in.");
         }
@@ -34,17 +35,18 @@ function Auth({ mode, email, setEmail, onSuccess }) {
 
   return (
     <div className="page">
+      <Link to="/" className="auth-topbar-brand">
+        Choreo Lab
+      </Link>
       <div className="card">
         <div className="brand">
           <span className="brand-mark" aria-hidden="true" />
           <h1 className="brand-title">Choreo Lab</h1>
           <p className="brand-description">
             Upload a non-copyrighted dance video and break down choreography
-            with counts, custom looping/speed, mirroring, and side-by-side
-            comparison.
+            with AI-detected counts, custom looping/speed, mirroring, and more!
           </p>
         </div>
-
         <h2 className="form-title">
           {mode === "login" ? "Log in" : "Sign up"}
         </h2>
@@ -62,7 +64,6 @@ function Auth({ mode, email, setEmail, onSuccess }) {
               required
             />
           </div>
-
           <div className="field">
             <label htmlFor="password">Password</label>
             <div className="password-input">
@@ -116,7 +117,6 @@ function Auth({ mode, email, setEmail, onSuccess }) {
               </button>
             </div>
           </div>
-
           <button type="submit" disabled={loading}>
             {loading ? (
               <span className="spinner" aria-hidden="true" />
@@ -127,7 +127,6 @@ function Auth({ mode, email, setEmail, onSuccess }) {
             )}
           </button>
         </form>
-
         {error && (
           <p className="error" role="alert" aria-live="polite">
             <svg
@@ -146,7 +145,6 @@ function Auth({ mode, email, setEmail, onSuccess }) {
             {error}
           </p>
         )}
-
         <p className="switch">
           {mode === "login" ? (
             <>
@@ -154,7 +152,7 @@ function Auth({ mode, email, setEmail, onSuccess }) {
             </>
           ) : (
             <>
-              Already have an account? <Link to="/">Log in</Link>
+              Already have an account? <Link to="/login">Log in</Link>
             </>
           )}
         </p>

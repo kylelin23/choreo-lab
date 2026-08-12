@@ -7,6 +7,7 @@ from apis.list_videos import list_videos
 from apis.delete_video import delete_video
 from apis.rename_video import rename_video
 from routes.auth import get_payload_or_error
+from apis.get_demo_video import get_demo_video
 from extensions import limiter
 
 videos_bp = Blueprint('videos', __name__)
@@ -96,3 +97,11 @@ def rename_video_route(video_id):
         return jsonify({"error": error}), status_code
 
     return jsonify({"status": "renamed"}), status_code
+
+@videos_bp.route('/api/demo/video', methods=['GET'])
+@limiter.limit("300 per hour")
+def demo_video_route():
+    result, error, status_code = get_demo_video()
+    if error:
+        return jsonify({"error": error}), status_code
+    return jsonify(result), status_code

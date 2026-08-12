@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { Routes, Route, Navigate, useNavigate } from "react-router-dom";
+import Home from "./pages/Home.jsx";
 import Auth from "./pages/Auth.jsx";
 import UploadDance from "./pages/UploadDance.jsx";
 import { me as apiMe } from "./lib/api";
@@ -28,15 +29,21 @@ function App() {
 
   return (
     <Routes>
+      <Route path="/" element={<Home />} />
       <Route
-        path="/"
+        path="/login"
         element={
-          <Auth
-            mode="login"
-            email={email}
-            setEmail={setEmail}
-            onSuccess={() => navigate("/upload-dance")}
-          />
+          email ? (
+            <Navigate to="/upload-dance" replace />
+          ) : (
+            <Auth
+              mode="login"
+              onSuccess={(userEmail) => {
+                setEmail(userEmail);
+                navigate("/upload-dance");
+              }}
+            />
+          )
         }
       />
       <Route
@@ -44,9 +51,10 @@ function App() {
         element={
           <Auth
             mode="signup"
-            email={email}
-            setEmail={setEmail}
-            onSuccess={() => navigate("/upload-dance")}
+            onSuccess={(userEmail) => {
+              setEmail(userEmail);
+              navigate("/upload-dance");
+            }}
           />
         }
       />
@@ -54,13 +62,9 @@ function App() {
         path="/upload-dance"
         element={
           email ? (
-            <UploadDance
-              email={email}
-              onLogout={handleLogout}
-              onUploadDance={() => navigate("/home")}
-            />
+            <UploadDance email={email} onLogout={handleLogout} />
           ) : (
-            <Navigate to="/" replace />
+            <Navigate to="/login" replace />
           )
         }
       />
