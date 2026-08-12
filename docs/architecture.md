@@ -12,7 +12,9 @@ Here is a preview of the frontend file architecture.
 src/
 ├── pages/
 │   ├── Auth.css
-│   ├── Auth.jsx          # Authentication page (starting page for user)
+│   ├── Auth.jsx          # Authentication page
+│   ├── Home.css
+│   ├── Home.jsx          # Home page (starting page for the user)
 │   ├── UploadDance.css
 │   └── UploadDance.jsx   # Page where user uploads their dance video and views and edits their processed video
 ├── App.jsx
