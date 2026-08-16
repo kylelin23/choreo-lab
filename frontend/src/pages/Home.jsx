@@ -5,7 +5,7 @@ import "./Home.css";
 import "./UploadDance.css";
 import { getDemoVideo } from "../lib/api";
 
-const HERO_TITLE = "Learn new dance choreography faster with Choreo Lab! ";
+const HERO_TITLE = "Welcome to Choreo Lab! ";
 const TYPING_SPEED_MS = 35;
 
 function useTypewriter(text, speed) {
@@ -95,7 +95,15 @@ function Home() {
           </div>
         )}
 
-        {!loading && demoVideo && <DanceViewerInline video={demoVideo} />}
+        {!loading && demoVideo && (
+          <div className="home-demo-section">
+            <span className="home-demo-badge">
+              <span className="home-demo-badge-dot" aria-hidden="true" />
+              Demo
+            </span>
+            <DanceViewerInline video={demoVideo} />
+          </div>
+        )}
       </main>
     </div>
   );

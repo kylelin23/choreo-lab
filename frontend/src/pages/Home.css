@@ -72,13 +72,16 @@
 
 .home-hero {
   max-width: 900px;
-  margin: 3rem auto 0;
+  margin: 0rem auto 0;
   padding: 0 1.5rem;
   text-align: center;
   flex: 1;
 }
 
 .home-hero h1 {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
   font-size: 2.9rem;
   font-weight: 800;
   color: #18181b;
@@ -144,4 +147,26 @@
 .home-btn-hero:hover {
   transform: translateY(-2px);
   box-shadow: 0 8px 24px rgba(79, 70, 229, 0.35);
+}
+
+.home-demo-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-bottom: 0.75rem;
+  padding: 0.3rem 0.85rem;
+  border-radius: 999px;
+  background: rgba(79, 70, 229, 0.1);
+  color: #4f46e5;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.home-demo-badge-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #4f46e5;
 }
