@@ -41,15 +41,11 @@ function Auth({ mode, onSuccess }) {
       <div className="card">
         <div className="brand">
           <span className="brand-mark" aria-hidden="true" />
-          <h1 className="brand-title">Choreo Lab</h1>
-          <p className="brand-description">
-            Upload a non-copyrighted dance video and break down choreography
-            with AI-detected counts, custom looping/speed, mirroring, and more!
-          </p>
+          <h1 className="brand-title">
+            {mode === "login" ? "Log in" : "Sign up"}
+          </h1>
+          <p className="subtitle">Get started with Choreo Lab</p>
         </div>
-        <h2 className="form-title">
-          {mode === "login" ? "Log in" : "Sign up"}
-        </h2>
         <form onSubmit={handleSubmit}>
           <div className="field">
             <label htmlFor="email">Email</label>

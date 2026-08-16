@@ -59,10 +59,10 @@
   color: #18181b;
 }
 
-.brand-description {
+.subtitle {
+  color: #666;
   margin: 0;
   font-size: 0.875rem;
-  color: #7a7a83;
   line-height: 1.55;
 }
 
@@ -71,11 +71,6 @@
   font-size: 1.1rem;
   font-weight: 600;
   color: #18181b;
-}
-
-.subtitle {
-  color: #666;
-  margin-bottom: 1.5rem;
 }
 
 form {
