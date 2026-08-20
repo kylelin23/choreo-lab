@@ -608,6 +608,7 @@ function DanceViewerInline({ video }) {
             ref={videoRef}
             src={video.video_url}
             crossOrigin="anonymous"
+            playsInline
             loop={looping && !sectionLooping}
             onClick={!slideshowOn && !cropMode ? togglePlay : undefined}
             onPointerDown={cropMode ? handleCropPointerDown : undefined}
