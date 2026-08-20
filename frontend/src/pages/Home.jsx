@@ -124,6 +124,20 @@ function maxPanForZoom(zoom) {
   return zoom > 1 ? ((zoom - 1) / zoom) * 50 : 0;
 }
 
+// iOS Safari has no way to fullscreen an arbitrary wrapping element — only
+// the <video> element itself, via its own webkitEnterFullscreen(), which
+// strips out the custom controls and count overlay entirely. Detecting
+// that up front lets us hide the fullscreen button there instead of
+// offering a control whose result is strictly worse than not using it.
+// Checked once at module load, since it depends only on browser
+// capability, not anything that changes at runtime.
+const SUPPORTS_ELEMENT_FULLSCREEN =
+  typeof document !== "undefined" &&
+  !!(
+    document.documentElement.requestFullscreen ||
+    document.documentElement.webkitRequestFullscreen
+  );
+
 // Identical to UploadDance.jsx's DanceViewerInline — same component, same
 // classes, same behavior — so the demo on the public Home page looks and
 // feels exactly like the authenticated viewer.
@@ -420,8 +434,30 @@ function DanceViewerInline({ video }) {
       setIsFullscreen(document.fullscreenElement === videoFrameRef.current);
     }
     document.addEventListener("fullscreenchange", handleFullscreenChange);
-    return () =>
+    document.addEventListener("webkitfullscreenchange", handleFullscreenChange);
+
+    const video = videoRef.current;
+    function handleIOSFullscreenBegin() {
+      setIsFullscreen(true);
+    }
+    function handleIOSFullscreenEnd() {
+      setIsFullscreen(false);
+    }
+    video?.addEventListener("webkitbeginfullscreen", handleIOSFullscreenBegin);
+    video?.addEventListener("webkitendfullscreen", handleIOSFullscreenEnd);
+
+    return () => {
       document.removeEventListener("fullscreenchange", handleFullscreenChange);
+      document.removeEventListener(
+        "webkitfullscreenchange",
+        handleFullscreenChange,
+      );
+      video?.removeEventListener(
+        "webkitbeginfullscreen",
+        handleIOSFullscreenBegin,
+      );
+      video?.removeEventListener("webkitendfullscreen", handleIOSFullscreenEnd);
+    };
   }, []);
 
   function togglePlay() {
@@ -452,11 +488,32 @@ function DanceViewerInline({ video }) {
   }
 
   function toggleFullscreen() {
-    if (!videoFrameRef.current) return;
-    if (document.fullscreenElement) {
-      document.exitFullscreen?.();
-    } else {
-      videoFrameRef.current.requestFullscreen?.();
+    const video = videoRef.current;
+    const frame = videoFrameRef.current;
+    if (!frame || !video) return;
+
+    if (document.fullscreenElement || document.webkitFullscreenElement) {
+      if (document.exitFullscreen) {
+        document.exitFullscreen();
+      } else if (document.webkitExitFullscreen) {
+        document.webkitExitFullscreen();
+      } else if (video.webkitExitFullscreen) {
+        video.webkitExitFullscreen();
+      }
+      return;
+    }
+
+    if (frame.requestFullscreen) {
+      frame.requestFullscreen();
+    } else if (frame.webkitRequestFullscreen) {
+      frame.webkitRequestFullscreen();
+    } else if (video.webkitEnterFullscreen) {
+      // iOS Safari fallback — it doesn't support fullscreening arbitrary
+      // wrapping elements, only the <video> element itself. This means the
+      // custom controls and count overlay won't be visible while in
+      // fullscreen on iPhone (a real limitation of iOS's native player),
+      // but it's the only way to get actual fullscreen playback there.
+      video.webkitEnterFullscreen();
     }
   }
 
@@ -791,16 +848,18 @@ function DanceViewerInline({ video }) {
                 {muted ? <MuteIcon /> : <VolumeIcon />}
               </button>
 
-              <button
-                type="button"
-                className="control-btn"
-                onClick={toggleFullscreen}
-                aria-label={
-                  isFullscreen ? "Exit fullscreen" : "Enter fullscreen"
-                }
-              >
-                {isFullscreen ? <FullscreenExitIcon /> : <FullscreenIcon />}
-              </button>
+              {SUPPORTS_ELEMENT_FULLSCREEN && (
+                <button
+                  type="button"
+                  className="control-btn"
+                  onClick={toggleFullscreen}
+                  aria-label={
+                    isFullscreen ? "Exit fullscreen" : "Enter fullscreen"
+                  }
+                >
+                  {isFullscreen ? <FullscreenExitIcon /> : <FullscreenIcon />}
+                </button>
+              )}
             </div>
 
             {loopPanelOpen && (
