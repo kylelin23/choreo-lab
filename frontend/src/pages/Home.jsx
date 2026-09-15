@@ -86,7 +86,11 @@ function Home() {
           Start Learning
         </button>
 
-        {loading && <div className="home-demo-loading">Loading demo…</div>}
+        {loading && (
+          <div className="home-demo-frame-placeholder">
+            <span className="spinner spinner-dark" aria-hidden="true" />
+          </div>
+        )}
 
         {!loading && error && (
           <div className="home-demo-error">
