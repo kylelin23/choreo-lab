@@ -5,6 +5,8 @@ One of the biggest challenges in learning dance choreography from online videos 
 
 Try out Choreo Lab here: [Production Deployment](http://18.237.24.57:5173/)
 
+Detailed documentation can be found in the [`docs/`](./docs) folder. 
+
 ## Team
 - [David Lee](https://www.linkedin.com/in/davidlee03/)
 - [Kyle Lin](https://www.linkedin.com/in/kyle-y-lin/)
