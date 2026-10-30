@@ -1,8 +1,4 @@
 ## Choreo Lab System Architecture
-
-#### System Diagram
-<img src="diagrams/architecture_diagram.png" alt="Architecture diagram" width="900" />
-
 #### Frontend
 The frontend is built with Vite and React. After authentication, it will let the user upload any dance video file they want and then process the video in the backend. The backend will then return a processed video that will help the user learn the dance better. Features of this app include counts synchronized to the dance video, custom looping and speed, video mirroring, and comparison dances side by side.
 
